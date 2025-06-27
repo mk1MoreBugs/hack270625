@@ -55,7 +55,7 @@ class DynamicPricingService:
     async def get_cluster_median_demand(self, apartment: Apartment) -> float:
         """Получает медианный спрос для кластера (проект + тип комнат)"""
         # Получаем все квартиры того же проекта и типа комнат
-        result = await self.session.exec(
+        result = await self.session.execute(
             select(Apartment)
             .join(Apartment.building)
             .join(Apartment.building.project)

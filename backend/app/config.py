@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     project_name: str = "Недвижимость 4.0"
     version: str = "1.0.0"
     
+    # Documentation access
+    docs_username: str = "admin"
+    docs_password: str = "change_this"
+    
     @property
     def database_url(self) -> str:
         """Формирует URL для подключения к базе данных"""
