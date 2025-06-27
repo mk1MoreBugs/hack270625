@@ -14,7 +14,7 @@ class StatsAggregatorService:
         """Вычисляет количество просмотров за последние 24 часа"""
         yesterday = datetime.utcnow() - timedelta(hours=24)
         
-        result = await self.session.exec(
+        result = await self.session.execute(
             select(func.count(ViewsLog.id))
             .where(
                 ViewsLog.apartment_id == apartment_id,
@@ -30,7 +30,7 @@ class StatsAggregatorService:
         yesterday = datetime.utcnow() - timedelta(hours=24)
         
         # Лиды - это уникальные пользователи, которые просмотрели квартиру
-        result = await self.session.exec(
+        result = await self.session.execute(
             select(func.count(func.distinct(ViewsLog.user_id)))
             .where(
                 ViewsLog.apartment_id == apartment_id,
@@ -45,7 +45,7 @@ class StatsAggregatorService:
         """Вычисляет количество бронирований за последние 24 часа"""
         yesterday = datetime.utcnow() - timedelta(hours=24)
         
-        result = await self.session.exec(
+        result = await self.session.execute(
             select(func.count(Booking.id))
             .where(
                 Booking.apartment_id == apartment_id,
@@ -62,7 +62,7 @@ class StatsAggregatorService:
     
     async def update_apartment_stats(self, apartment_id: int) -> ApartmentStats:
         """Обновляет статистику для конкретной квартиры"""
-        apartment = await self.session.exec(
+        apartment = await self.session.execute(
             select(Apartment).where(Apartment.id == apartment_id)
         ).first()
         
@@ -88,7 +88,7 @@ class StatsAggregatorService:
     
     async def update_all_apartment_stats(self) -> List[ApartmentStats]:
         """Обновляет статистику для всех квартир"""
-        apartments = await self.session.exec(select(Apartment)).all()
+        apartments = await self.session.execute(select(Apartment)).all()
         
         updated_stats = []
         for apartment in apartments:
