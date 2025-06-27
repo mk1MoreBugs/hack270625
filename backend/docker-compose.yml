@@ -85,7 +85,7 @@ services:
       - real_estate_network
     volumes:
       - ./db_password.txt:/app/db_password.txt:ro
-    command: python run_worker.py
+    command: celery -A app.worker.celery_app worker --loglevel=info
 
   # Celery beat (планировщик задач)
   celery_beat:
