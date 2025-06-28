@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # Database Configuration
     postgres_host: str = "postgres"
     postgres_port: int = 5432
-    postgres_db: str = "real_estate_db"
-    postgres_user: str = "real_estate_user"
+    postgres_db: str = "app"
+    postgres_user: str = "postgres"
     postgres_password: str = "postgres"
     
     # Redis Configuration
