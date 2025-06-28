@@ -35,7 +35,7 @@ class CRUDBase(Generic[ModelType]):
     ) -> List[ModelType]:
         """Получить список объектов с пагинацией"""
         result = await db.execute(select(self.model).offset(skip).limit(limit))
-        return result.all()
+        return result.scalars().all()
     
     async def create(self, db: AsyncSession, obj_in: dict) -> ModelType:
         """Создать новый объект"""
