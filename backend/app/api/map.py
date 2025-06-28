@@ -5,8 +5,11 @@ from app.database import get_async_session
 from app.schemas import ProjectGeoResponse, MapFiltersResponse
 from app.crud import project
 from datetime import datetime
+from app.models import Project
+from app.crud import CRUDProject
 
 router = APIRouter(prefix="/map", tags=["map"])
+project_crud = CRUDProject(Project)
 
 
 @router.get("/projects", response_model=List[ProjectGeoResponse])
@@ -38,4 +41,12 @@ async def get_map_filters(
 ):
     """Получить доступные фильтры для карты"""
     filters = await project.get_map_filters(db)
-    return filters 
+    return filters
+
+
+@router.get("", response_model=List[ProjectGeoResponse])
+async def get_map_data(
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить данные для карты"""
+    return await project_crud.get_multi(db) 

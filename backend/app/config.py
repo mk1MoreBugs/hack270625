@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 import os
+import secrets
 
 
 class Settings(BaseSettings):
@@ -23,9 +24,15 @@ class Settings(BaseSettings):
     redis_db: int = 0
     
     # Security
-    secret_key: str = "your-secret-key-change-in-production"
-    algorithm: str = "HS256"
+    secret_key: str = secrets.token_urlsafe(32)
+    
+    # JWT settings
+    jwt_algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    refresh_token_expire_days: int = 30
+    
+    # Bcrypt settings
+    bcrypt_rounds: int = 12  # Количество раундов хеширования
     
     # Dynamic Pricing
     elasticity_cap: float = 3.0
@@ -48,7 +55,9 @@ class Settings(BaseSettings):
     @property
     def database_url(self) -> str:
         """Формирует URL для подключения к базе данных"""
-        return f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        url = f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        print(url)
+        return url
     
     @property
     def redis_url(self) -> str:
@@ -57,3 +66,4 @@ class Settings(BaseSettings):
     
     
 settings = Settings()
+ 

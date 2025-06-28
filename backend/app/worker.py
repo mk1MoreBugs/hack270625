@@ -4,8 +4,9 @@ from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.stats_aggregator import StatsAggregatorService
 from app.services.dynamic_pricing import DynamicPricingService
-from app.crud import apartment
+from app.crud import CRUDWorker
 import asyncio
+from typing import Dict, Any, List
 
 # Создаем Celery приложение
 celery_app = Celery(
@@ -34,17 +35,57 @@ async def get_async_session() -> AsyncSession:
         return session
 
 
+def format_stats_response(stats: Any) -> Dict[str, Any]:
+    """Форматирует ответ для задачи обновления статистики"""
+    return {
+        "views_24h": stats.views_24h,
+        "leads_24h": stats.leads_24h,
+        "bookings_24h": stats.bookings_24h,
+        "days_on_site": stats.days_on_site
+    }
+
+
+def format_pricing_response(result: Any) -> Dict[str, Any]:
+    """Форматирует ответ для задачи обновления цен"""
+    return {
+        "apartment_id": result.apartment_id,
+        "old_price": result.old_price,
+        "new_price": result.new_price,
+        "price_change_percent": result.price_change_percent,
+        "demand_score": result.demand_score
+    }
+
+
 @celery_app.task
 def update_stats_task():
     """Задача для обновления статистики всех квартир"""
     async def _update_stats():
         session = await get_async_session()
         try:
+            worker_crud = CRUDWorker(session)
+            apartments = await worker_crud.get_apartments_for_stats()
+            
+            if not apartments:
+                return {
+                    "status": "success",
+                    "message": "Нет квартир для обновления статистики"
+                }
+            
             aggregator = StatsAggregatorService(session)
-            updated_stats = await aggregator.update_all_apartment_stats()
+            updated_stats = []
+            
+            for apartment in apartments:
+                try:
+                    stats = await aggregator.update_apartment_stats(apartment.id)
+                    updated_stats.append(format_stats_response(stats))
+                except Exception as e:
+                    print(f"Ошибка при обновлении статистики квартиры {apartment.id}: {e}")
+                    continue
+            
             return {
                 "status": "success",
                 "updated_apartments": len(updated_stats),
+                "stats": updated_stats,
                 "message": f"Статистика обновлена для {len(updated_stats)} квартир"
             }
         except Exception as e:
@@ -65,17 +106,23 @@ def update_single_apartment_stats_task(apartment_id: int):
     async def _update_single_stats():
         session = await get_async_session()
         try:
+            worker_crud = CRUDWorker(session)
+            apartment = await worker_crud.get_apartment_for_task(apartment_id)
+            
+            if not apartment:
+                return {
+                    "status": "error",
+                    "apartment_id": apartment_id,
+                    "message": f"Квартира {apartment_id} не найдена"
+                }
+            
             aggregator = StatsAggregatorService(session)
             stats = await aggregator.update_apartment_stats(apartment_id)
+            
             return {
                 "status": "success",
                 "apartment_id": apartment_id,
-                "stats": {
-                    "views_24h": stats.views_24h,
-                    "leads_24h": stats.leads_24h,
-                    "bookings_24h": stats.bookings_24h,
-                    "days_on_site": stats.days_on_site
-                },
+                "stats": format_stats_response(stats),
                 "message": f"Статистика обновлена для квартиры {apartment_id}"
             }
         except Exception as e:
@@ -97,22 +144,32 @@ def update_dynamic_pricing_task():
     async def _update_pricing():
         session = await get_async_session()
         try:
+            worker_crud = CRUDWorker(session)
+            apartments = await worker_crud.get_apartments_for_pricing()
+            
+            if not apartments:
+                return {
+                    "status": "success",
+                    "message": "Нет квартир для обновления цен"
+                }
+            
             pricing_service = DynamicPricingService(session)
-            results = await pricing_service.update_all_apartment_prices()
+            results = []
+            
+            for apartment in apartments:
+                try:
+                    result = await pricing_service.update_apartment_price(apartment)
+                    if result:
+                        results.append(format_pricing_response(result))
+                        await worker_crud.update_apartment_price_timestamp(apartment.id)
+                except Exception as e:
+                    print(f"Ошибка при обновлении цены квартиры {apartment.id}: {e}")
+                    continue
             
             return {
                 "status": "success",
                 "updated_apartments": len(results),
-                "results": [
-                    {
-                        "apartment_id": result.apartment_id,
-                        "old_price": result.old_price,
-                        "new_price": result.new_price,
-                        "price_change_percent": result.price_change_percent,
-                        "demand_score": result.demand_score
-                    }
-                    for result in results
-                ],
+                "results": results,
                 "message": f"Цены обновлены для {len(results)} квартир"
             }
         except Exception as e:
@@ -133,26 +190,25 @@ def update_single_apartment_price_task(apartment_id: int):
     async def _update_single_price():
         session = await get_async_session()
         try:
-            apartment_obj = await apartment.get(session, apartment_id)
-            if not apartment_obj:
+            worker_crud = CRUDWorker(session)
+            apartment = await worker_crud.get_apartment_for_task(apartment_id)
+            
+            if not apartment:
                 return {
                     "status": "error",
                     "apartment_id": apartment_id,
-                    "error": "Квартира не найдена",
                     "message": f"Квартира {apartment_id} не найдена"
                 }
             
             pricing_service = DynamicPricingService(session)
-            result = await pricing_service.update_apartment_price(apartment_obj)
+            result = await pricing_service.update_apartment_price(apartment)
             
             if result:
+                await worker_crud.update_apartment_price_timestamp(apartment.id)
                 return {
                     "status": "success",
                     "apartment_id": apartment_id,
-                    "old_price": result.old_price,
-                    "new_price": result.new_price,
-                    "price_change_percent": result.price_change_percent,
-                    "demand_score": result.demand_score,
+                    **format_pricing_response(result),
                     "message": f"Цена обновлена для квартиры {apartment_id}"
                 }
             else:

@@ -128,6 +128,8 @@ class Apartment(SQLModel, table=True):
     balcony: bool = Field(default=False)
     loggia: bool = Field(default=False)
     parking: bool = Field(default=False)
+    infrastructure_score: Optional[float] = Field(default=None)
+    transport_score: Optional[float] = Field(default=None)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     

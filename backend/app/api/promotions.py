@@ -1,51 +1,41 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List
 from app.database import get_async_session
 from app.models import Promotion
 from app.schemas import PromotionResponse, PromotionCreate, PromotionUpdate
-from app.crud import promotion
+from app.crud import CRUDPromotion
 from datetime import datetime
 
 router = APIRouter(prefix="/promotions", tags=["promotions"])
+promotion_crud = CRUDPromotion(Promotion)
 
 
-@router.get("/", response_model=List[PromotionResponse])
-async def get_promotions(
-    active_only: bool = Query(False, description="Только активные акции"),
-    limit: int = Query(20, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить список акций"""
-    if active_only:
-        now = datetime.utcnow()
-        promotions_list = await promotion.get_active(db, now)
-    else:
-        promotions_list = await promotion.get_multi(db, skip=offset, limit=limit)
-    
-    # Применяем пагинацию
-    start = offset
-    end = start + limit
-    return promotions_list[start:end]
-
-
-@router.post("/", response_model=PromotionResponse)
+@router.post("", response_model=PromotionResponse)
 async def create_promotion(
     promotion_data: PromotionCreate,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Создать новую акцию"""
-    # Проверяем даты
-    if promotion_data.ends_at <= promotion_data.starts_at:
-        raise HTTPException(
-            status_code=400,
-            detail="Дата окончания акции должна быть позже даты начала"
-        )
-    
-    promotion_dict = promotion_data.dict()
-    promotion_obj = await promotion.create(db, promotion_dict)
-    return promotion_obj
+    return await promotion_crud.create(db, promotion_data.dict())
+
+
+@router.get("", response_model=List[PromotionResponse])
+async def get_promotions(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить список акций"""
+    return await promotion_crud.get_multi(db, skip=skip, limit=limit)
+
+
+@router.get("/active", response_model=List[PromotionResponse])
+async def get_active_promotions(
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить список активных акций"""
+    return await promotion_crud.get_active(db, datetime.utcnow())
 
 
 @router.get("/{promotion_id}", response_model=PromotionResponse)
@@ -53,11 +43,14 @@ async def get_promotion(
     promotion_id: int,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить информацию об акции"""
-    promotion_obj = await promotion.get(db, promotion_id)
-    if not promotion_obj:
-        raise HTTPException(status_code=404, detail="Акция не найдена")
-    return promotion_obj
+    """Получить акцию по ID"""
+    db_promotion = await promotion_crud.get(db, promotion_id)
+    if not db_promotion:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Promotion not found"
+        )
+    return db_promotion
 
 
 @router.put("/{promotion_id}", response_model=PromotionResponse)
@@ -66,24 +59,14 @@ async def update_promotion(
     promotion_data: PromotionUpdate,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Обновить информацию об акции"""
-    promotion_obj = await promotion.get(db, promotion_id)
-    if not promotion_obj:
-        raise HTTPException(status_code=404, detail="Акция не найдена")
-    
-    update_data = promotion_data.dict(exclude_unset=True)
-    
-    # Если обновляются даты, проверяем их корректность
-    starts_at = update_data.get("starts_at", promotion_obj.starts_at)
-    ends_at = update_data.get("ends_at", promotion_obj.ends_at)
-    if ends_at <= starts_at:
+    """Обновить акцию"""
+    db_promotion = await promotion_crud.get(db, promotion_id)
+    if not db_promotion:
         raise HTTPException(
-            status_code=400,
-            detail="Дата окончания акции должна быть позже даты начала"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Promotion not found"
         )
-    
-    promotion_obj = await promotion.update(db, promotion_obj, update_data)
-    return promotion_obj
+    return await promotion_crud.update(db, db_promotion, promotion_data.dict(exclude_unset=True))
 
 
 @router.delete("/{promotion_id}")
@@ -92,7 +75,9 @@ async def delete_promotion(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Удалить акцию"""
-    success = await promotion.delete(db, promotion_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Акция не найдена")
-    return {"message": "Акция удалена"} 
+    if not await promotion_crud.delete(db, promotion_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Promotion not found"
+        )
+    return {"message": "Promotion deleted"} 

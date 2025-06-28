@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, validator, EmailStr, constr
 from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from app.models import (
@@ -397,4 +397,54 @@ class DynamicPricingResult(BaseModel):
     demand_score: float
     demand_normalized: float
     reason: str
-    description: str 
+    description: str
+
+
+class TokenResponse(BaseModel):
+    """Схема ответа с токенами"""
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+
+
+class TokenPayload(BaseModel):
+    """Схема данных токена"""
+    sub: Optional[int] = None
+    exp: Optional[datetime] = None
+
+
+class UserLogin(BaseModel):
+    """Схема для входа пользователя"""
+    email: EmailStr
+    password: str
+
+
+class UserRegisterBase(BaseModel):
+    """Базовая схема для регистрации пользователя"""
+    email: EmailStr
+    password: constr(min_length=8)
+    full_name: str
+    phone: str
+
+
+class BuyerRegister(UserRegisterBase):
+    """Схема для регистрации покупателя"""
+    role: UserRole = UserRole.BUYER
+
+
+class DeveloperRegister(UserRegisterBase):
+    """Схема для регистрации застройщика"""
+    role: UserRole = UserRole.DEVELOPER
+    company_name: str
+    inn: str
+    ogrn: str
+
+
+class AdminRegister(UserRegisterBase):
+    """Схема для регистрации администратора"""
+    role: UserRole = UserRole.ADMIN
+
+
+class RefreshToken(BaseModel):
+    """Схема для обновления токена"""
+    refresh_token: str 
