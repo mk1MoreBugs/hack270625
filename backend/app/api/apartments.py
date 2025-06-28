@@ -34,7 +34,8 @@ async def get_apartments(
     
     # Применяем фильтры
     filtered_apartments = []
-    for apt in apartments_list:
+    for apt_tuple in apartments_list:
+        apt = apt_tuple[0]  # Получаем модель из кортежа
         # Фильтр по цене
         if min_price is not None and apt.current_price < min_price:
             continue
