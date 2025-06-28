@@ -3,17 +3,16 @@ services:
   postgres:
     image: postgres:17.5-alpine
     environment:
-      POSTGRES_DB: real_estate_db
-      POSTGRES_USER: real_estate_user
+      PGDATA: /var/lib/postgresql/data
       POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - real_estate_network
-    env_file:
-      - .env
     secrets:
       - postgres_password
     healthcheck:
@@ -38,17 +37,8 @@ services:
   # FastAPI приложение
   app:
     build: .
-    environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=real_estate_db
-      - POSTGRES_USER=real_estate_user
-      - POSTGRES_PASSWORD_FILE=/app/db_password.txt
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
