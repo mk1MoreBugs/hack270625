@@ -1,112 +1,65 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, func
-from typing import List
-from datetime import datetime, timedelta
-from app.models import Apartment, ApartmentStats, ViewsLog, Booking
-from app.crud import apartment_stats, views_log, booking
+from sqlmodel import select
+from typing import List, Optional
+from datetime import datetime
+from app.models import Property, PropertyAnalytics
+from app.crud import CRUDPropertyAnalytics
 
 
 class StatsAggregatorService:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self.analytics_crud = CRUDPropertyAnalytics(PropertyAnalytics)
     
-    async def calculate_views_24h(self, apartment_id: int) -> int:
-        """Вычисляет количество просмотров за последние 24 часа"""
-        yesterday = datetime.utcnow() - timedelta(hours=24)
-        
+    async def update_property_stats(self, property_id: str) -> PropertyAnalytics:
+        """Обновляет статистику для конкретного объекта недвижимости"""
+        # Получаем объект недвижимости
         result = await self.session.execute(
-            select(func.count(ViewsLog.id))
-            .where(
-                ViewsLog.apartment_id == apartment_id,
-                ViewsLog.event == "view",
-                ViewsLog.occurred_at >= yesterday
-            )
+            select(Property).where(Property.id == property_id)
         )
-        count = result.first()
-        return count or 0
-    
-    async def calculate_leads_24h(self, apartment_id: int) -> int:
-        """Вычисляет количество лидов за последние 24 часа"""
-        yesterday = datetime.utcnow() - timedelta(hours=24)
+        property_obj = result.scalar_one_or_none()
         
-        # Лиды - это уникальные пользователи, которые просмотрели квартиру
-        result = await self.session.execute(
-            select(func.count(func.distinct(ViewsLog.user_id)))
-            .where(
-                ViewsLog.apartment_id == apartment_id,
-                ViewsLog.user_id.is_not(None),
-                ViewsLog.occurred_at >= yesterday
-            )
+        if not property_obj:
+            raise ValueError(f"Объект недвижимости с ID {property_id} не найден")
+        
+        # Собираем статистику через CRUD
+        views_24h = await self.analytics_crud.get_views_count(self.session, property_id, hours=24)
+        leads_24h = await self.analytics_crud.get_favourites_count(self.session, property_id, hours=24)
+        bookings_24h = await self.analytics_crud.get_bookings_count(self.session, property_id, hours=24)
+        days_on_site = await self.analytics_crud.get_days_on_market(self.session, property_obj)
+        
+        # Обновляем статистику
+        return await self.analytics_crud.update_stats(
+            self.session,
+            property_id=property_id,
+            days_on_market=days_on_site,
+            clicks_total=views_24h,
+            favourites_total=leads_24h,
+            bookings_total=bookings_24h
         )
-        count = result.first()
-        return count or 0
     
-    async def calculate_bookings_24h(self, apartment_id: int) -> int:
-        """Вычисляет количество бронирований за последние 24 часа"""
-        yesterday = datetime.utcnow() - timedelta(hours=24)
-        
-        result = await self.session.execute(
-            select(func.count(Booking.id))
-            .where(
-                Booking.apartment_id == apartment_id,
-                Booking.booked_at >= yesterday
-            )
-        )
-        count = result.first()
-        return count or 0
-    
-    async def calculate_days_on_site(self, apartment: Apartment) -> int:
-        """Вычисляет количество дней, которые квартира находится на сайте"""
-        days_on_site = (datetime.utcnow() - apartment.created_at).days
-        return max(0, days_on_site)
-    
-    async def update_apartment_stats(self, apartment_id: int) -> ApartmentStats:
-        """Обновляет статистику для конкретной квартиры"""
-        apartment = await self.session.execute(
-            select(Apartment).where(Apartment.id == apartment_id)
-        ).first()
-        
-        if not apartment:
-            raise ValueError(f"Квартира с ID {apartment_id} не найдена")
-        
-        views_24h = await self.calculate_views_24h(apartment_id)
-        leads_24h = await self.calculate_leads_24h(apartment_id)
-        bookings_24h = await self.calculate_bookings_24h(apartment_id)
-        days_on_site = await self.calculate_days_on_site(apartment)
-        
-        # Обновляем статистику через CRUD
-        stats = await apartment_stats.update_stats(
-            self.session, 
-            apartment_id, 
-            views_24h, 
-            leads_24h, 
-            bookings_24h, 
-            days_on_site
-        )
-        
-        return stats
-    
-    async def update_all_apartment_stats(self) -> List[ApartmentStats]:
-        """Обновляет статистику для всех квартир"""
-        apartments = await self.session.execute(select(Apartment)).all()
+    async def update_all_property_stats(self) -> List[PropertyAnalytics]:
+        """Обновляет статистику для всех объектов недвижимости"""
+        result = await self.session.execute(select(Property))
+        properties = result.scalars().all()
         
         updated_stats = []
-        for apartment in apartments:
+        for property_obj in properties:
             try:
-                stats = await self.update_apartment_stats(apartment.id)
+                stats = await self.update_property_stats(property_obj.id)
                 updated_stats.append(stats)
             except Exception as e:
-                print(f"Ошибка при обновлении статистики квартиры {apartment.id}: {e}")
+                print(f"Ошибка при обновлении статистики объекта {property_obj.id}: {e}")
                 continue
         
         return updated_stats
     
-    async def get_apartment_stats(self, apartment_id: int) -> ApartmentStats:
-        """Получает статистику квартиры"""
-        stats = await apartment_stats.get_by_apartment(self.session, apartment_id)
+    async def get_property_stats(self, property_id: str) -> Optional[PropertyAnalytics]:
+        """Получает статистику объекта недвижимости"""
+        stats = await self.analytics_crud.get(self.session, property_id)
         
         if not stats:
             # Если статистики нет, создаем ее
-            stats = await self.update_apartment_stats(apartment_id)
+            stats = await self.update_property_stats(property_id)
         
         return stats 

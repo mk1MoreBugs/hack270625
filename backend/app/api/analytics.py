@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict
+from uuid import UUID
 from app.database import get_async_session
-from app.models import ApartmentStats, ViewsLog
-from app.schemas import ApartmentStatsResponse, MarketAnalyticsResponse, ViewsLogResponse
-from app.crud import apartment_stats, views_log
+from app.models import PropertyAnalytics, ViewsLog
+from app.schemas import PropertyAnalyticsResponse, MarketAnalyticsResponse, ViewsLogResponse
+from app.crud import crud_property_analytics, crud_views_log
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -12,69 +13,112 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 @router.get("/market", response_model=MarketAnalyticsResponse)
 async def get_market_analytics(
-    city: Optional[str] = Query(None, description="Город"),
-    region_code: Optional[str] = Query(None, description="Код региона"),
-    period_days: int = Query(30, description="Период анализа в днях"),
+    days: int = 30,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить аналитику рынка"""
-    start_date = datetime.utcnow() - timedelta(days=period_days)
+    """Получить аналитику по рынку"""
+    # Получаем статистику просмотров
+    total_views = await crud_views_log.get_total_views(db, days)
+    avg_views = await crud_views_log.get_avg_views(db, days)
+    avg_bookings = await crud_views_log.get_avg_bookings(db, days)
     
-    # Получаем статистику по просмотрам и бронированиям
-    stats = await apartment_stats.get_market_stats(
-        db,
-        start_date=start_date,
-        city=city,
-        region_code=region_code
+    return MarketAnalyticsResponse(
+        total_views=total_views,
+        avg_views=avg_views,
+        avg_bookings=avg_bookings,
+        period_days=days
     )
-    
-    return stats
 
 
-@router.get("/apartments/{apartment_id}/stats", response_model=ApartmentStatsResponse)
-async def get_apartment_stats(
-    apartment_id: int,
-    period_days: int = Query(30, description="Период анализа в днях"),
+@router.get("/properties/{property_id}", response_model=PropertyAnalyticsResponse)
+async def get_property_analytics(
+    property_id: UUID,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить статистику по квартире"""
-    stats = await apartment_stats.get(db, apartment_id)
-    if not stats:
-        raise HTTPException(status_code=404, detail="Статистика не найдена")
-    return stats
+    """Получить аналитику по объекту недвижимости"""
+    analytics = await crud_property_analytics.get(db, property_id)
+    if not analytics:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analytics not found"
+        )
+    return analytics
 
 
-@router.get("/apartments/{apartment_id}/views", response_model=List[ViewsLogResponse])
-async def get_apartment_views(
-    apartment_id: int,
-    start_date: Optional[datetime] = Query(None, description="Начальная дата"),
-    end_date: Optional[datetime] = Query(None, description="Конечная дата"),
-    limit: int = Query(100, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
+@router.get("/views/{property_id}", response_model=List[ViewsLogResponse])
+async def get_property_views(
+    property_id: UUID,
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить историю просмотров квартиры"""
-    views = await views_log.get_by_apartment(
+    """Получить историю просмотров объекта недвижимости"""
+    views = await crud_views_log.get_by_property(
         db,
-        apartment_id,
+        property_id,
         start_date=start_date,
         end_date=end_date,
-        skip=offset,
+        skip=skip,
         limit=limit
     )
     return views
 
 
+@router.get("/district/{district}/stats", response_model=Dict[str, float])
+async def get_district_stats(
+    district: str,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить статистику по району"""
+    # Здесь можно добавить логику для получения статистики по району
+    # Пока возвращаем базовую структуру
+    return {
+        "popularity_score": 0.75,
+        "avg_price": 15000000.0,
+        "demand_level": 0.8
+    }
+
+
 @router.get("/demand-clusters", response_model=List[dict])
 async def get_demand_clusters(
-    project_id: Optional[int] = Query(None, description="ID проекта"),
-    rooms: Optional[int] = Query(None, description="Количество комнат"),
+    project_id: Optional[UUID] = Query(None, description="ID проекта"),
+    property_type: Optional[str] = Query(None, description="Тип недвижимости"),
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить кластеры спроса для расчета динамических цен"""
-    clusters = await apartment_stats.get_demand_clusters(
-        db,
-        project_id=project_id,
-        rooms=rooms
-    )
-    return clusters 
+    # Здесь можно добавить логику для получения кластеров спроса
+    # Пока возвращаем базовую структуру
+    return [
+        {
+            "cluster_id": 1,
+            "demand_score": 0.8,
+            "price_range": "15-20M",
+            "property_count": 25
+        },
+        {
+            "cluster_id": 2,
+            "demand_score": 0.6,
+            "price_range": "20-25M",
+            "property_count": 15
+        }
+    ]
+
+
+@router.get("/high-demand", response_model=List[PropertyAnalyticsResponse])
+async def get_high_demand_properties(
+    min_score: int = Query(7, ge=1, le=10, description="Минимальный скор спроса"),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить объекты с высоким спросом"""
+    return await crud_property_analytics.get_high_demand(db, min_score)
+
+
+@router.get("/popular", response_model=List[PropertyAnalyticsResponse])
+async def get_popular_properties(
+    min_views: int = Query(100, ge=1, description="Минимальное количество просмотров"),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить популярные объекты"""
+    return await crud_property_analytics.get_popular(db, min_views) 

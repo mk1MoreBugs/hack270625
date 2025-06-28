@@ -2,15 +2,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, update, delete
 from typing import List, Optional, TypeVar, Generic, Type, Dict, Any
 from app.models import (
-    User, Developer, Project, Building, Apartment, 
-    ApartmentStats, PriceHistory, ViewsLog, Booking,
+    User, Developer, Project, Building, Property, PropertyAddress, PropertyPrice,
+    ResidentialProperty, PropertyFeatures, PropertyAnalytics, CommercialProperty,
+    HouseAndLand, PropertyMedia, PromoTag, MortgageProgram, PriceHistory, ViewsLog, Booking,
     Promotion, WebhookInbox, DynamicPricingConfig,
-    UserRole, PropertyClass, ApartmentStatus, BookingStatus,
+    UserRole, PropertyType, PropertyCategory, PropertyStatus, BookingStatus,
     ViewEvent, PriceChangeReason
 )
 from datetime import datetime, timedelta
 import json
 from sqlalchemy import and_, or_, func
+from sqlalchemy.orm import joinedload
+from uuid import UUID
 
 # Generic type для CRUD операций
 ModelType = TypeVar("ModelType")
@@ -22,11 +25,12 @@ class CRUDBase(Generic[ModelType]):
     def __init__(self, model: Type[ModelType]):
         self.model = model
     
-    async def get(self, db: AsyncSession, id: int) -> Optional[ModelType]:
+    async def get(self, db: AsyncSession, id: Any) -> Optional[ModelType]:
         """Получить объект по ID"""
         result = await db.execute(select(self.model).where(self.model.id == id))
-        return result.first()
+        return result.scalar_one_or_none()
     
+
     async def get_multi(
         self, 
         db: AsyncSession, 
@@ -37,6 +41,7 @@ class CRUDBase(Generic[ModelType]):
         result = await db.execute(select(self.model).offset(skip).limit(limit))
         return result.scalars().all()
     
+
     async def create(self, db: AsyncSession, obj_in: dict) -> ModelType:
         """Создать новый объект"""
         db_obj = self.model(**obj_in)
@@ -45,6 +50,7 @@ class CRUDBase(Generic[ModelType]):
         await db.refresh(db_obj)
         return db_obj
     
+
     async def update(
         self, 
         db: AsyncSession, 
@@ -61,7 +67,8 @@ class CRUDBase(Generic[ModelType]):
         await db.refresh(db_obj)
         return db_obj
     
-    async def delete(self, db: AsyncSession, id: int) -> bool:
+
+    async def delete(self, db: AsyncSession, id: Any) -> bool:
         """Удалить объект по ID"""
         obj = await self.get(db, id)
         if obj:
@@ -74,15 +81,21 @@ class CRUDBase(Generic[ModelType]):
 class CRUDUser(CRUDBase[User]):
     """CRUD операции для пользователей"""
     
-    async def get_by_email(self, db: AsyncSession, email: str):
+    async def get_by_email(
+        self,
+        db: AsyncSession,
+        email: str
+    ) -> Optional[User]:
         """Получить пользователя по email"""
-        result = await db.execute(select(User).filter(User.email == email))
+        query = select(self.model).where(self.model.email == email)
+        result = await db.execute(query)
         return result.scalar_one_or_none()
     
     async def get_by_role(self, db: AsyncSession, role: UserRole):
         """Получить пользователей по роли"""
         result = await db.execute(select(User).filter(User.role == role))
         return result.scalars().all()
+
 
     async def get_multi(self, db: AsyncSession, *, skip: int = 0, limit: int = 100):
         """Получить список пользователей"""
@@ -93,198 +106,312 @@ class CRUDUser(CRUDBase[User]):
 class CRUDDeveloper(CRUDBase[Developer]):
     """CRUD операции для застройщиков"""
     
-    async def get_by_inn(self, db: AsyncSession, inn: str) -> Optional[Developer]:
-        """Получить застройщика по ИНН"""
-        result = await db.execute(select(Developer).where(Developer.inn == inn))
-        return result.first()
-    
-    async def get_verified(self, db: AsyncSession) -> List[Developer]:
-        """Получить верифицированных застройщиков"""
-        result = await db.execute(select(Developer).where(Developer.verified == True))
-        return result.all()
+    async def get_by_name(self, db: AsyncSession, name: str) -> Optional[Developer]:
+        """Получить застройщика по названию"""
+        result = await db.execute(select(Developer).where(Developer.name == name))
+        return result.scalar_one_or_none()
 
 
 class CRUDProject(CRUDBase[Project]):
     """CRUD операции для проектов"""
     
-    async def get_by_city(self, db: AsyncSession, city: str) -> List[Project]:
-        """Получить проекты по городу"""
-        result = await db.execute(select(Project).where(Project.city == city))
-        return result.scalars().all()
-    
-    async def get_by_developer(self, db: AsyncSession, developer_id: int) -> List[Project]:
-        """Получить проекты застройщика"""
+    async def get_by_developer(self, db: AsyncSession, developer_id: UUID) -> List[Project]:
+        """Получить проекты по застройщику"""
         result = await db.execute(select(Project).where(Project.developer_id == developer_id))
         return result.scalars().all()
     
-    async def get_by_class(self, db: AsyncSession, class_type: PropertyClass) -> List[Project]:
-        """Получить проекты по классу недвижимости"""
-        result = await db.execute(select(Project).where(Project.class_type == class_type))
+    async def get_by_name(self, db: AsyncSession, name: str) -> List[Project]:
+        """Получить проекты по названию"""
+        result = await db.execute(select(Project).where(Project.name == name))
         return result.scalars().all()
 
 
 class CRUDBuilding(CRUDBase[Building]):
-    """CRUD операции для корпусов"""
+    """CRUD операции для зданий"""
     
-    async def get_by_project(self, db: AsyncSession, project_id: int) -> List[Building]:
-        """Получить корпуса проекта"""
+    async def get_by_project(self, db: AsyncSession, project_id: UUID) -> List[Building]:
+        """Получить здания по проекту"""
         result = await db.execute(select(Building).where(Building.project_id == project_id))
-        return result.all()
+        return result.scalars().all()
 
 
-class CRUDApartment(CRUDBase[Apartment]):
-    """CRUD операции для квартир"""
+class CRUDProperty(CRUDBase[Property]):
+    """CRUD операции для объектов недвижимости"""
     
-    async def get_by_building(self, db: AsyncSession, building_id: int) -> List[Apartment]:
-        """Получить квартиры корпуса"""
-        result = await db.execute(select(Apartment).where(Apartment.building_id == building_id))
-        return result.all()
+    async def get_by_building(self, db: AsyncSession, building_id: UUID) -> List[Property]:
+        """Получить объекты по зданию"""
+        result = await db.execute(select(Property).where(Property.building_id == building_id))
+        return result.scalars().all()
     
-    async def get_by_status(self, db: AsyncSession, status: ApartmentStatus) -> List[Apartment]:
-        """Получить квартиры по статусу"""
-        result = await db.execute(select(Apartment).where(Apartment.status == status))
-        return result.all()
+    async def get_by_project(self, db: AsyncSession, project_id: UUID) -> List[Property]:
+        """Получить объекты по проекту"""
+        result = await db.execute(select(Property).where(Property.project_id == project_id))
+        return result.scalars().all()
     
-    async def get_by_rooms(self, db: AsyncSession, rooms: int) -> List[Apartment]:
-        """Получить квартиры по количеству комнат"""
-        result = await db.execute(select(Apartment).where(Apartment.rooms == rooms))
-        return result.all()
+    async def get_by_developer(self, db: AsyncSession, developer_id: UUID) -> List[Property]:
+        """Получить объекты по застройщику"""
+        result = await db.execute(select(Property).where(Property.developer_id == developer_id))
+        return result.scalars().all()
+    
+    async def get_by_status(self, db: AsyncSession, status: PropertyStatus) -> List[Property]:
+        """Получить объекты по статусу"""
+        result = await db.execute(select(Property).where(Property.status == status))
+        return result.scalars().all()
+    
+    async def get_by_type(self, db: AsyncSession, property_type: PropertyType) -> List[Property]:
+        """Получить объекты по типу"""
+        result = await db.execute(select(Property).where(Property.property_type == property_type))
+        return result.scalars().all()
+    
+    async def get_by_category(self, db: AsyncSession, category: PropertyCategory) -> List[Property]:
+        """Получить объекты по категории"""
+        result = await db.execute(select(Property).where(Property.category == category))
+        return result.scalars().all()
+    
+    async def get_available(self, db: AsyncSession) -> List[Property]:
+        """Получить доступные объекты"""
+        result = await db.execute(select(Property).where(Property.status == PropertyStatus.AVAILABLE))
+        return result.scalars().all()
+    
+    async def get_with_relations(self, db: AsyncSession, property_id: UUID) -> Optional[Property]:
+        """Получить объект со всеми связанными данными"""
+        query = select(Property).where(Property.id == property_id).options(
+            joinedload(Property.developer),
+            joinedload(Property.project),
+            joinedload(Property.building),
+            joinedload(Property.address),
+            joinedload(Property.price),
+            joinedload(Property.residential),
+            joinedload(Property.features),
+            joinedload(Property.analytics),
+            joinedload(Property.commercial),
+            joinedload(Property.house_land),
+            joinedload(Property.media),
+            joinedload(Property.promo_tags),
+            joinedload(Property.mortgage_programs)
+        )
+        result = await db.execute(query)
+        return result.scalar_one_or_none()
+
+
+class CRUDPropertyAddress(CRUDBase[PropertyAddress]):
+    """CRUD операции для адресов объектов"""
+    
+    async def get_by_city(self, db: AsyncSession, city: str) -> List[PropertyAddress]:
+        """Получить адреса по городу"""
+        result = await db.execute(select(PropertyAddress).where(PropertyAddress.city == city))
+        return result.scalars().all()
+    
+    async def get_by_region(self, db: AsyncSession, region: str) -> List[PropertyAddress]:
+        """Получить адреса по региону"""
+        result = await db.execute(select(PropertyAddress).where(PropertyAddress.region == region))
+        return result.scalars().all()
+    
+    async def get_by_district(self, db: AsyncSession, district: str) -> List[PropertyAddress]:
+        """Получить адреса по району"""
+        result = await db.execute(select(PropertyAddress).where(PropertyAddress.district == district))
+        return result.scalars().all()
+
+
+class CRUDPropertyPrice(CRUDBase[PropertyPrice]):
+    """CRUD операции для цен объектов"""
     
     async def get_by_price_range(
         self, 
         db: AsyncSession, 
         min_price: float, 
         max_price: float
-    ) -> List[Apartment]:
-        """Получить квартиры в диапазоне цен"""
+    ) -> List[PropertyPrice]:
+        """Получить цены в диапазоне"""
         result = await db.execute(
-            select(Apartment).where(
-                Apartment.current_price >= min_price,
-                Apartment.current_price <= max_price
+            select(PropertyPrice).where(
+                and_(
+                    PropertyPrice.current_price >= min_price,
+                    PropertyPrice.current_price <= max_price
+                )
             )
         )
-        return result.all()
-    
-    async def get_available(self, db: AsyncSession) -> List[Apartment]:
-        """Получить доступные квартиры"""
-        return await self.get_by_status(db, ApartmentStatus.AVAILABLE)
+        return result.scalars().all()
     
     async def update_price(
         self, 
         db: AsyncSession, 
-        apartment_id: int, 
+        property_id: UUID, 
         new_price: float
-    ) -> Optional[Apartment]:
-        """Обновить цену квартиры"""
-        apartment = await self.get(db, apartment_id)
-        if apartment:
-            apartment.current_price = new_price
-            apartment.updated_at = datetime.utcnow()
-            db.add(apartment)
+    ) -> Optional[PropertyPrice]:
+        """Обновить цену объекта"""
+        price_obj = await self.get(db, property_id)
+        if price_obj:
+            old_price = price_obj.current_price
+            price_obj.current_price = new_price
             await db.commit()
-            await db.refresh(apartment)
-        return apartment
+            await db.refresh(price_obj)
+            
+            # Создать запись в истории цен
+            price_history = PriceHistory(
+                property_id=property_id,
+                old_price=old_price,
+                new_price=new_price,
+                reason=PriceChangeReason.MANUAL
+            )
+            db.add(price_history)
+            await db.commit()
+            
+        return price_obj
 
 
-class CRUDApartmentStats(CRUDBase[ApartmentStats]):
-    """CRUD операции для статистики квартир"""
+class CRUDResidentialProperty(CRUDBase[ResidentialProperty]):
+    """CRUD операции для жилой недвижимости"""
     
-    async def get_by_apartment(self, db: AsyncSession, apartment_id: int) -> Optional[ApartmentStats]:
-        """Получить статистику квартиры"""
-        result = await db.execute(select(ApartmentStats).where(ApartmentStats.apartment_id == apartment_id))
-        return result.first()
+    async def get_by_rooms(self, db: AsyncSession, rooms: int) -> List[ResidentialProperty]:
+        """Получить объекты по количеству комнат"""
+        result = await db.execute(select(ResidentialProperty).where(ResidentialProperty.rooms == rooms))
+        return result.scalars().all()
     
-    async def update_stats(
+    async def get_by_area_range(
         self, 
         db: AsyncSession, 
-        apartment_id: int, 
-        views_24h: int,
-        leads_24h: int,
-        bookings_24h: int,
-        days_on_site: int
-    ) -> ApartmentStats:
-        """Обновить статистику квартиры"""
-        stats = await self.get_by_apartment(db, apartment_id)
-        if not stats:
-            stats = ApartmentStats(apartment_id=apartment_id)
-            db.add(stats)
-        
-        stats.views_24h = views_24h
-        stats.leads_24h = leads_24h
-        stats.bookings_24h = bookings_24h
-        stats.days_on_site = days_on_site
-        stats.updated_at = datetime.utcnow()
-        
-        db.add(stats)
-        await db.commit()
-        await db.refresh(stats)
-        return stats
-
-    async def get_market_stats(
-        self,
-        db: AsyncSession,
-        start_date: datetime,
-        city: Optional[str] = None,
-        region_code: Optional[str] = None
-    ):
-        """Получить статистику рынка"""
-        query = select(
-            func.count(ApartmentStats.id).label("total_views"),
-            func.avg(ApartmentStats.views_24h).label("avg_views"),
-            func.avg(ApartmentStats.bookings_24h).label("avg_bookings")
+        min_area: float, 
+        max_area: float
+    ) -> List[ResidentialProperty]:
+        """Получить объекты по площади"""
+        result = await db.execute(
+            select(ResidentialProperty).where(
+                and_(
+                    ResidentialProperty.total_area >= min_area,
+                    ResidentialProperty.total_area <= max_area
+                )
+            )
         )
-        
-        if city or region_code:
-            query = query.join(Apartment).join(Building).join(Project)
-            if city:
-                query = query.filter(Project.city == city)
-            if region_code:
-                query = query.filter(Project.region_code == region_code)
-        
-        result = await db.execute(query)
-        return result.mappings().one()
+        return result.scalars().all()
+    
+    async def get_studios(self, db: AsyncSession) -> List[ResidentialProperty]:
+        """Получить студии"""
+        result = await db.execute(select(ResidentialProperty).where(ResidentialProperty.is_studio == True))
+        return result.scalars().all()
 
-    async def get_demand_clusters(
-        self,
-        db: AsyncSession,
-        project_id: Optional[int] = None,
-        rooms: Optional[int] = None
-    ):
-        """Получить кластеры спроса"""
-        query = select(
-            Apartment.rooms,
-            func.count(ApartmentStats.id).label("total_apartments"),
-            func.avg(ApartmentStats.views_24h).label("avg_views"),
-            func.avg(ApartmentStats.bookings_24h).label("avg_bookings")
-        ).join(ApartmentStats)
-        
-        if project_id:
-            query = query.join(Building).filter(Building.project_id == project_id)
-        if rooms:
-            query = query.filter(Apartment.rooms == rooms)
-        
-        query = query.group_by(Apartment.rooms)
-        result = await db.execute(query)
-        return result.mappings().all()
+
+class CRUDPropertyFeatures(CRUDBase[PropertyFeatures]):
+    """CRUD операции для особенностей объектов"""
+    
+    async def get_with_balcony(self, db: AsyncSession) -> List[PropertyFeatures]:
+        """Получить объекты с балконом"""
+        result = await db.execute(select(PropertyFeatures).where(PropertyFeatures.balcony == True))
+        return result.scalars().all()
+    
+    async def get_with_parking(self, db: AsyncSession) -> List[PropertyFeatures]:
+        """Получить объекты с парковкой"""
+        result = await db.execute(select(PropertyFeatures).where(PropertyFeatures.parking_type.isnot(None)))
+        return result.scalars().all()
+
+
+class CRUDPropertyAnalytics(CRUDBase[PropertyAnalytics]):
+    """CRUD операции для аналитики объектов"""
+    
+    async def get_high_demand(self, db: AsyncSession, min_score: int = 7) -> List[PropertyAnalytics]:
+        """Получить объекты с высоким спросом"""
+        result = await db.execute(
+            select(PropertyAnalytics).where(PropertyAnalytics.demand_score >= min_score)
+        )
+        return result.scalars().all()
+    
+    async def get_popular(self, db: AsyncSession, min_views: int = 100) -> List[PropertyAnalytics]:
+        """Получить популярные объекты"""
+        result = await db.execute(
+            select(PropertyAnalytics).where(PropertyAnalytics.clicks_total >= min_views)
+        )
+        return result.scalars().all()
+
+
+class CRUDCommercialProperty(CRUDBase[CommercialProperty]):
+    """CRUD операции для коммерческой недвижимости"""
+    
+    async def get_by_subtype(self, db: AsyncSession, subtype: PropertyCategory) -> List[CommercialProperty]:
+        """Получить объекты по подтипу"""
+        result = await db.execute(select(CommercialProperty).where(CommercialProperty.commercial_subtype == subtype))
+        return result.scalars().all()
+    
+    async def get_open_space(self, db: AsyncSession) -> List[CommercialProperty]:
+        """Получить объекты с открытой планировкой"""
+        result = await db.execute(select(CommercialProperty).where(CommercialProperty.open_space == True))
+        return result.scalars().all()
+
+
+class CRUDHouseAndLand(CRUDBase[HouseAndLand]):
+    """CRUD операции для домов и участков"""
+    
+    async def get_by_land_area(
+        self, 
+        db: AsyncSession, 
+        min_area: float, 
+        max_area: float
+    ) -> List[HouseAndLand]:
+        """Получить объекты по площади участка"""
+        result = await db.execute(
+            select(HouseAndLand).where(
+                and_(
+                    HouseAndLand.land_area >= min_area,
+                    HouseAndLand.land_area <= max_area
+                )
+            )
+        )
+        return result.scalars().all()
+    
+    async def get_by_year_built(self, db: AsyncSession, year: int) -> List[HouseAndLand]:
+        """Получить объекты по году постройки"""
+        result = await db.execute(select(HouseAndLand).where(HouseAndLand.year_built == year))
+        return result.scalars().all()
+
+
+class CRUDPropertyMedia(CRUDBase[PropertyMedia]):
+    """CRUD операции для медиа объектов"""
+    
+    async def get_by_property(self, db: AsyncSession, property_id: UUID) -> List[PropertyMedia]:
+        """Получить медиа по объекту"""
+        result = await db.execute(select(PropertyMedia).where(PropertyMedia.property_id == property_id))
+        return result.scalars().all()
+
+
+class CRUDPromoTag(CRUDBase[PromoTag]):
+    """CRUD операции для промо-тегов"""
+    
+    async def get_by_property(self, db: AsyncSession, property_id: UUID) -> List[PromoTag]:
+        """Получить теги по объекту"""
+        result = await db.execute(select(PromoTag).where(PromoTag.property_id == property_id))
+        return result.scalars().all()
+    
+    async def get_by_tag(self, db: AsyncSession, tag: str) -> List[PromoTag]:
+        """Получить объекты по тегу"""
+        result = await db.execute(select(PromoTag).where(PromoTag.tag == tag))
+        return result.scalars().all()
+
+
+class CRUDMortgageProgram(CRUDBase[MortgageProgram]):
+    """CRUD операции для ипотечных программ"""
+    
+    async def get_by_property(self, db: AsyncSession, property_id: UUID) -> List[MortgageProgram]:
+        """Получить программы по объекту"""
+        result = await db.execute(select(MortgageProgram).where(MortgageProgram.property_id == property_id))
+        return result.scalars().all()
 
 
 class CRUDPriceHistory(CRUDBase[PriceHistory]):
     """CRUD операции для истории цен"""
     
-    async def get_by_apartment(
+    async def get_by_property(
         self, 
         db: AsyncSession, 
-        apartment_id: int,
+        property_id: UUID,
         limit: int = 10
     ) -> List[PriceHistory]:
-        """Получить историю цен квартиры"""
+        """Получить историю цен по объекту"""
         result = await db.execute(
             select(PriceHistory)
-            .where(PriceHistory.apartment_id == apartment_id)
+            .where(PriceHistory.property_id == property_id)
             .order_by(PriceHistory.changed_at.desc())
             .limit(limit)
         )
-        return result.all()
+        return result.scalars().all()
     
     async def get_recent_changes(
         self, 
@@ -298,63 +425,85 @@ class CRUDPriceHistory(CRUDBase[PriceHistory]):
             .where(PriceHistory.changed_at >= since)
             .order_by(PriceHistory.changed_at.desc())
         )
-        return result.all()
+        return result.scalars().all()
 
 
 class CRUDViewsLog(CRUDBase[ViewsLog]):
     """CRUD операции для логов просмотров"""
     
-    async def get_by_apartment(
+    async def get_by_property(
         self,
         db: AsyncSession,
-        apartment_id: int,
+        property_id: UUID,
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None,
         skip: int = 0,
         limit: int = 100
     ):
-        """Получить историю просмотров квартиры"""
-        query = select(ViewsLog).filter(ViewsLog.apartment_id == apartment_id)
+        """Получить логи просмотров по объекту"""
+        query = select(ViewsLog).where(ViewsLog.property_id == property_id)
         
         if start_date:
-            query = query.filter(ViewsLog.occurred_at >= start_date)
+            query = query.where(ViewsLog.occurred_at >= start_date)
         if end_date:
-            query = query.filter(ViewsLog.occurred_at <= end_date)
+            query = query.where(ViewsLog.occurred_at <= end_date)
         
-        query = query.offset(skip).limit(limit)
+        query = query.order_by(ViewsLog.occurred_at.desc()).offset(skip).limit(limit)
         result = await db.execute(query)
         return result.scalars().all()
     
     async def get_views_count(
         self, 
         db: AsyncSession, 
-        apartment_id: int,
+        property_id: UUID,
         hours: int = 24
     ) -> int:
-        """Получить количество просмотров квартиры за период"""
+        """Получить количество просмотров за период"""
         since = datetime.utcnow() - timedelta(hours=hours)
         result = await db.execute(
-            select(ViewsLog)
+            select(func.count(ViewsLog.id))
             .where(
-                ViewsLog.apartment_id == apartment_id,
-                ViewsLog.event == ViewEvent.VIEW,
-                ViewsLog.occurred_at >= since
+                and_(
+                    ViewsLog.property_id == property_id,
+                    ViewsLog.event == ViewEvent.VIEW,
+                    ViewsLog.occurred_at >= since
+                )
             )
         )
-        return len(result.all())
+        return result.scalar() or 0
+    
+    async def get_favourites_count(
+        self, 
+        db: AsyncSession, 
+        property_id: UUID,
+        hours: int = 24
+    ) -> int:
+        """Получить количество добавлений в избранное за период"""
+        since = datetime.utcnow() - timedelta(hours=hours)
+        result = await db.execute(
+            select(func.count(ViewsLog.id))
+            .where(
+                and_(
+                    ViewsLog.property_id == property_id,
+                    ViewsLog.event == ViewEvent.FAVOURITE,
+                    ViewsLog.occurred_at >= since
+                )
+            )
+        )
+        return result.scalar() or 0
 
 
 class CRUDBooking(CRUDBase[Booking]):
     """CRUD операции для бронирований"""
     
-    async def get_by_apartment(
+    async def get_by_property(
         self, 
         db: AsyncSession, 
-        apartment_id: int
+        property_id: UUID
     ) -> List[Booking]:
-        """Получить бронирования квартиры"""
-        result = await db.execute(select(Booking).where(Booking.apartment_id == apartment_id))
-        return result.all()
+        """Получить бронирования по объекту"""
+        result = await db.execute(select(Booking).where(Booking.property_id == property_id))
+        return result.scalars().all()
     
     async def get_by_user(
         self, 
@@ -363,7 +512,7 @@ class CRUDBooking(CRUDBase[Booking]):
     ) -> List[Booking]:
         """Получить бронирования пользователя"""
         result = await db.execute(select(Booking).where(Booking.user_id == user_id))
-        return result.all()
+        return result.scalars().all()
     
     async def get_by_status(
         self, 
@@ -372,24 +521,27 @@ class CRUDBooking(CRUDBase[Booking]):
     ) -> List[Booking]:
         """Получить бронирования по статусу"""
         result = await db.execute(select(Booking).where(Booking.status == status))
-        return result.all()
+        return result.scalars().all()
     
     async def get_recent_bookings(
         self, 
         db: AsyncSession, 
-        apartment_id: int,
+        property_id: UUID,
         hours: int = 24
     ) -> List[Booking]:
-        """Получить недавние бронирования квартиры"""
+        """Получить недавние бронирования"""
         since = datetime.utcnow() - timedelta(hours=hours)
         result = await db.execute(
             select(Booking)
             .where(
-                Booking.apartment_id == apartment_id,
-                Booking.booked_at >= since
+                and_(
+                    Booking.property_id == property_id,
+                    Booking.booked_at >= since
+                )
             )
+            .order_by(Booking.booked_at.desc())
         )
-        return result.all()
+        return result.scalars().all()
 
 
 class CRUDDynamicPricingConfig(CRUDBase[DynamicPricingConfig]):
@@ -400,17 +552,19 @@ class CRUDDynamicPricingConfig(CRUDBase[DynamicPricingConfig]):
         result = await db.execute(
             select(DynamicPricingConfig).where(DynamicPricingConfig.enabled == True)
         )
-        return result.first()
+        return result.scalar_one_or_none()
 
 
 class CRUDPromotion(CRUDBase[Promotion]):
+    """CRUD операции для акций"""
+    
     async def get_active(self, db: AsyncSession, current_time: datetime):
         """Получить активные акции"""
         result = await db.execute(
-            select(Promotion).filter(
+            select(Promotion).where(
                 and_(
                     Promotion.starts_at <= current_time,
-                    Promotion.ends_at > current_time
+                    Promotion.ends_at >= current_time
                 )
             )
         )
@@ -418,25 +572,82 @@ class CRUDPromotion(CRUDBase[Promotion]):
 
 
 class CRUDWebhook(CRUDBase[WebhookInbox]):
+    """CRUD операции для вебхуков"""
+    
     async def get_unprocessed(self, db: AsyncSession, source: Optional[str] = None):
         """Получить необработанные вебхуки"""
-        query = select(WebhookInbox).filter(WebhookInbox.processed == False)
+        query = select(WebhookInbox).where(WebhookInbox.processed == False)
         if source:
-            query = query.filter(WebhookInbox.source == source)
+            query = query.where(WebhookInbox.source == source)
         result = await db.execute(query)
         return result.scalars().all()
 
 
-# Создаем экземпляры CRUD классов
-user = CRUDUser(User)
-developer = CRUDDeveloper(Developer)
-project = CRUDProject(Project)
-building = CRUDBuilding(Building)
-apartment = CRUDApartment(Apartment)
-apartment_stats = CRUDApartmentStats(ApartmentStats)
-price_history = CRUDPriceHistory(PriceHistory)
-views_log = CRUDViewsLog(ViewsLog)
-booking = CRUDBooking(Booking)
-dynamic_pricing_config = CRUDDynamicPricingConfig(DynamicPricingConfig)
-promotion = CRUDPromotion(Promotion)
-webhook = CRUDWebhook(WebhookInbox) 
+class CRUDWorker:
+    """CRUD операции для воркера"""
+    
+    def __init__(self, session: AsyncSession):
+        self.session = session
+    
+    async def get_property_for_task(self, property_id: UUID) -> Optional[Property]:
+        """Получить объект для задачи"""
+        result = await self.session.execute(select(Property).where(Property.id == property_id))
+        return result.scalar_one_or_none()
+    
+    async def get_properties_for_pricing(self) -> List[Property]:
+        """Получить объекты для динамического ценообразования"""
+        result = await self.session.execute(
+            select(Property)
+            .where(Property.status == PropertyStatus.AVAILABLE)
+            .options(
+                joinedload(Property.price),
+                joinedload(Property.analytics)
+            )
+        )
+        return result.scalars().all()
+    
+    async def get_properties_for_stats(self) -> List[Property]:
+        """Получить объекты для обновления статистики"""
+        result = await self.session.execute(
+            select(Property)
+            .where(Property.status == PropertyStatus.AVAILABLE)
+            .options(
+                joinedload(Property.analytics),
+                joinedload(Property.views_logs),
+                joinedload(Property.bookings)
+            )
+        )
+        return result.scalars().all()
+    
+    async def update_property_price_timestamp(self, property_id: UUID) -> None:
+        """Обновить временную метку цены объекта"""
+        await self.session.execute(
+            update(Property)
+            .where(Property.id == property_id)
+            .values(updated_at=datetime.utcnow())
+        )
+        await self.session.commit()
+
+
+# Создание экземпляров CRUD классов
+crud_user = CRUDUser(User)
+crud_developer = CRUDDeveloper(Developer)
+crud_project = CRUDProject(Project)
+crud_building = CRUDBuilding(Building)
+crud_property = CRUDProperty(Property)
+crud_property_address = CRUDPropertyAddress(PropertyAddress)
+crud_property_price = CRUDPropertyPrice(PropertyPrice)
+crud_residential_property = CRUDResidentialProperty(ResidentialProperty)
+crud_property_features = CRUDPropertyFeatures(PropertyFeatures)
+crud_property_analytics = CRUDPropertyAnalytics(PropertyAnalytics)
+crud_commercial_property = CRUDCommercialProperty(CommercialProperty)
+crud_house_land = CRUDHouseAndLand(HouseAndLand)
+crud_property_media = CRUDPropertyMedia(PropertyMedia)
+crud_promo_tag = CRUDPromoTag(PromoTag)
+crud_mortgage_program = CRUDMortgageProgram(MortgageProgram)
+crud_price_history = CRUDPriceHistory(PriceHistory)
+crud_views_log = CRUDViewsLog(ViewsLog)
+crud_booking = CRUDBooking(Booking)
+crud_dynamic_pricing_config = CRUDDynamicPricingConfig(DynamicPricingConfig)
+crud_promotion = CRUDPromotion(Promotion)
+crud_webhook = CRUDWebhook(WebhookInbox)
