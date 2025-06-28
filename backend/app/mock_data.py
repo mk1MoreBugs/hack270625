@@ -10,7 +10,7 @@ from app.crud import developer, project, building, apartment, user
 async def create_mock_data(session: AsyncSession):
     """Создает тестовые данные в базе данных"""
     
-    # Создаем застройщика
+    # Создаем первого застройщика (ПИК)
     dev_data = {
         "name": "ПИК",
         "description": "Крупнейший застройщик России",
@@ -22,7 +22,7 @@ async def create_mock_data(session: AsyncSession):
     }
     dev = await developer.create(session, dev_data)
     
-    # Создаем проект
+    # Создаем проект ПИК
     project_data = {
         "name": "ЖК Зеленый парк",
         "description": """Жилой комплекс бизнес-класса в экологически чистом районе.
@@ -38,7 +38,7 @@ async def create_mock_data(session: AsyncSession):
     }
     proj = await project.create(session, project_data)
     
-    # Создаем здание
+    # Создаем здание ПИК
     building_data = {
         "name": "Корпус 1",
         "floors": 25,
@@ -47,7 +47,7 @@ async def create_mock_data(session: AsyncSession):
     }
     build = await building.create(session, building_data)
     
-    # Создаем квартиры
+    # Создаем квартиры ПИК
     apartments_data = [
         {
             "building_id": build.id,
@@ -98,6 +98,54 @@ async def create_mock_data(session: AsyncSession):
     
     for apt_data in apartments_data:
         await apartment.create(session, apt_data)
+
+    # Создаем второго застройщика (СтройИнвест)
+    dev2_data = {
+        "name": "ООО СтройИнвест",
+        "description": "Надежный застройщик",
+        "website": "https://stroyinvest.ru",
+        "inn": "7701234567",
+        "verified": False
+    }
+    dev2 = await developer.create(session, dev2_data)
+    
+    # Создаем проект СтройИнвест
+    project2_data = {
+        "name": "Зеленый квартал",
+        "city": "Москва",
+        "region_code": "77",
+        "address": "ул. Ленина, 123",
+        "description": "Современный жилой комплекс",
+        "class_type": PropertyClass.COMFORT,
+        "developer_id": dev2.id
+    }
+    proj2 = await project.create(session, project2_data)
+    
+    # Создаем здание СтройИнвест
+    building2_data = {
+        "name": "Корпус 1",
+        "floors": 25,
+        "project_id": proj2.id
+    }
+    build2 = await building.create(session, building2_data)
+    
+    # Создаем квартиру СтройИнвест
+    apartment2_data = {
+        "number": "123",
+        "floor": 12,
+        "rooms": 2,
+        "area_total": 65.5,
+        "area_living": 45.0,
+        "area_kitchen": 12.0,
+        "base_price": 8_500_000,
+        "current_price": 8_500_000,
+        "balcony": True,
+        "loggia": False,
+        "parking": True,
+        "building_id": build2.id,
+        "status": ApartmentStatus.AVAILABLE
+    }
+    await apartment.create(session, apartment2_data)
     
     # Создаем тестового пользователя
     user_data = {
