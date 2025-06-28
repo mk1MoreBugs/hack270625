@@ -61,7 +61,7 @@ git clone <repository-url>
 cd backend
 ```
 
-### 2.2. Настройка переменных окружения
+### 2. Настройка переменных окружения
 ```bash
 # Скопируйте пример файла
 cp env.example .env
@@ -73,13 +73,6 @@ echo "your_secure_password_here" > db_password.txt
 nano .env
 ```
 
-### 2.2. Назначение пароля пользователю базы postgresql
-```bash
-docker exec -it backend-postgres-1 psql -U real_estate_user -d real_estate_db
-```
-```
-\password real_estate_user
-```
 
 ### 3. Запуск через Docker Compose
 ```bash
@@ -213,6 +206,11 @@ backend/
 ├── docker-compose.yml # Docker конфигурация
 ├── requirements.txt   # Зависимости Python
 └── README.md         # Документация
+```
+
+### Заполнение таблиц
+```python
+docker compose up --build -d && docker compose exec app python init_db.py
 ```
 
 ### Добавление новых эндпоинтов:

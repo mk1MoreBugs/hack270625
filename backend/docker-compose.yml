@@ -59,8 +59,8 @@ services:
     networks:
       - real_estate_network
     volumes:
+      - "./app:/backend/app"
       - ./db_password.txt:/app/db_password.txt:ro
-    command: python run.py
 
   # Celery worker
   celery_worker:
