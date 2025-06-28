@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import datetime, date
 from enum import Enum
 import json
+from uuid import UUID, uuid4
 
 
 class UserRole(str, Enum):
@@ -11,17 +12,30 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 
-class PropertyClass(str, Enum):
-    ECONOM = "econom"
-    COMFORT = "comfort"
-    BUSINESS = "business"
-    PREMIUM = "premium"
+class PropertyType(str, Enum):
+    RESIDENTIAL = "residential"
+    COMMERCIAL = "commercial"
 
 
-class ApartmentStatus(str, Enum):
+class PropertyCategory(str, Enum):
+    FLAT_NEW = "flat_new"
+    FLAT_SECONDARY = "flat_secondary"
+    ROOM = "room"
+    HOUSE = "house"
+    TOWNHOUSE = "townhouse"
+    PART_OF_HOUSE = "part_of_house"
+    LAND_PLOT = "land_plot"
+    GARAGE = "garage"
+    OFFICE = "office"
+    RETAIL = "retail"
+    WAREHOUSE = "warehouse"
+
+
+class PropertyStatus(str, Enum):
     AVAILABLE = "available"
-    RESERVED = "reserved"
+    BOOKED = "booked"
     SOLD = "sold"
+    ARCHIVED = "archived"
 
 
 class BookingStatus(str, Enum):
@@ -62,139 +76,256 @@ class User(SQLModel, table=True):
 class Developer(SQLModel, table=True):
     __tablename__ = "developers"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
     name: str
-    inn: str = Field(unique=True, index=True)
-    description: Optional[str] = None
-    logo_url: Optional[str] = None
-    website: Optional[str] = None
-    verified: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     projects: List["Project"] = Relationship(back_populates="developer")
+    properties: List["Property"] = Relationship(back_populates="developer")
 
 
 class Project(SQLModel, table=True):
     __tablename__ = "projects"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
-    developer_id: int = Field(foreign_key="developers.id")
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
     name: str
-    city: str
-    region_code: str
-    address: str
-    description: Optional[str] = None
-    class_type: PropertyClass
-    completion_date: Optional[datetime] = None
-    total_apartments: Optional[int] = None
-    available_apartments: Optional[int] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    developer_id: Optional[UUID] = Field(default=None, foreign_key="developers.id")
     
     # Relationships
-    developer: Developer = Relationship(back_populates="projects")
+    developer: Optional[Developer] = Relationship(back_populates="projects")
     buildings: List["Building"] = Relationship(back_populates="project")
+    properties: List["Property"] = Relationship(back_populates="project")
 
 
 class Building(SQLModel, table=True):
     __tablename__ = "buildings"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
-    project_id: int = Field(foreign_key="projects.id")
-    name: str
-    floors: int
-    completion_date: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
+    project_id: Optional[UUID] = Field(default=None, foreign_key="projects.id")
     
     # Relationships
-    project: Project = Relationship(back_populates="buildings")
-    apartments: List["Apartment"] = Relationship(back_populates="building")
+    project: Optional[Project] = Relationship(back_populates="buildings")
+    properties: List["Property"] = Relationship(back_populates="building")
 
 
-class Apartment(SQLModel, table=True):
-    __tablename__ = "apartments"
+class Property(SQLModel, table=True):
+    __tablename__ = "properties"
     
-    id: Optional[int] = Field(default=None, primary_key=True)
-    building_id: int = Field(foreign_key="buildings.id")
-    number: str
-    floor: int
-    rooms: int
-    area_total: float
-    area_living: Optional[float] = None
-    area_kitchen: Optional[float] = None
-    base_price: float
-    current_price: float
-    status: ApartmentStatus = Field(default=ApartmentStatus.AVAILABLE)
-    balcony: bool = Field(default=False)
-    loggia: bool = Field(default=False)
-    parking: bool = Field(default=False)
-    infrastructure_score: Optional[float] = Field(default=None)
-    transport_score: Optional[float] = Field(default=None)
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
+    external_id: Optional[str] = Field(default=None, max_length=50)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
+    property_type: PropertyType
+    category: PropertyCategory
+    developer_id: Optional[UUID] = Field(default=None, foreign_key="developers.id")
+    project_id: Optional[UUID] = Field(default=None, foreign_key="projects.id")
+    building_id: Optional[UUID] = Field(default=None, foreign_key="buildings.id")
+    status: PropertyStatus = Field(default=PropertyStatus.AVAILABLE)
+    has_3d_tour: bool = Field(default=False)
     
     # Relationships
-    building: Building = Relationship(back_populates="apartments")
-    price_history: List["PriceHistory"] = Relationship(back_populates="apartment")
-    views_logs: List["ViewsLog"] = Relationship(back_populates="apartment")
-    bookings: List["Booking"] = Relationship(back_populates="apartment")
-    stats: Optional["ApartmentStats"] = Relationship(back_populates="apartment")
+    developer: Optional[Developer] = Relationship(back_populates="properties")
+    project: Optional[Project] = Relationship(back_populates="properties")
+    building: Optional[Building] = Relationship(back_populates="properties")
+    address: Optional["PropertyAddress"] = Relationship(back_populates="property")
+    price: Optional["PropertyPrice"] = Relationship(back_populates="property")
+    residential: Optional["ResidentialProperty"] = Relationship(back_populates="property")
+    features: Optional["PropertyFeatures"] = Relationship(back_populates="property")
+    analytics: Optional["PropertyAnalytics"] = Relationship(back_populates="property")
+    commercial: Optional["CommercialProperty"] = Relationship(back_populates="property")
+    house_land: Optional["HouseAndLand"] = Relationship(back_populates="property")
+    media: List["PropertyMedia"] = Relationship(back_populates="property")
+    promo_tags: List["PromoTag"] = Relationship(back_populates="property")
+    mortgage_programs: List["MortgageProgram"] = Relationship(back_populates="property")
+    price_history: List["PriceHistory"] = Relationship(back_populates="property")
+    views_logs: List["ViewsLog"] = Relationship(back_populates="property")
+    bookings: List["Booking"] = Relationship(back_populates="property")
+
+
+class PropertyAddress(SQLModel, table=True):
+    __tablename__ = "property_addresses"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    address_full: str
+    city: str = Field(max_length=50)
+    region: str = Field(max_length=50)
+    district: Optional[str] = Field(default=None, max_length=50)
+    lat: float
+    lng: float
+    
+    # Relationships
+    property: Property = Relationship(back_populates="address")
+
+
+class PropertyPrice(SQLModel, table=True):
+    __tablename__ = "property_prices"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    base_price: float
+    current_price: float
+    currency: str = Field(default="RUB", max_length=3)
+    price_per_m2: Optional[float] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="price")
+
+
+class ResidentialProperty(SQLModel, table=True):
+    __tablename__ = "residential_properties"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    unit_number: Optional[str] = Field(default=None, max_length=20)
+    floor: Optional[int] = Field(default=None)
+    floors_total: Optional[int] = Field(default=None)
+    rooms: Optional[int] = Field(default=None)
+    is_studio: bool = Field(default=False)
+    is_free_plan: bool = Field(default=False)
+    total_area: Optional[float] = Field(default=None)
+    living_area: Optional[float] = Field(default=None)
+    kitchen_area: Optional[float] = Field(default=None)
+    ceiling_height: Optional[float] = Field(default=None)
+    completion_date: Optional[datetime] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="residential")
+
+
+class PropertyFeatures(SQLModel, table=True):
+    __tablename__ = "property_features"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    balcony: bool = Field(default=False)
+    loggia: bool = Field(default=False)
+    terrace: bool = Field(default=False)
+    view: Optional[str] = Field(default=None, max_length=20)
+    finishing: Optional[str] = Field(default=None, max_length=20)
+    parking_type: Optional[str] = Field(default=None, max_length=20)
+    parking_price: Optional[float] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="features")
+
+
+class PropertyAnalytics(SQLModel, table=True):
+    __tablename__ = "property_analytics"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    days_on_market: Optional[int] = Field(default=None)
+    rli_index: Optional[float] = Field(default=None)
+    demand_score: Optional[int] = Field(default=None)
+    clicks_total: Optional[int] = Field(default=None)
+    favourites_total: Optional[int] = Field(default=None)
+    bookings_total: Optional[int] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="analytics")
+
+
+class CommercialProperty(SQLModel, table=True):
+    __tablename__ = "commercial_properties"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    commercial_subtype: Optional[PropertyCategory] = Field(default=None)
+    open_space: Optional[bool] = Field(default=None)
+    has_showcase_windows: Optional[bool] = Field(default=None)
+    allowed_activity: Optional[str] = Field(default=None, max_length=50)
+    tax_rate: Optional[float] = Field(default=None)
+    maintenance_fee: Optional[float] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="commercial")
+
+
+class HouseAndLand(SQLModel, table=True):
+    __tablename__ = "houses_and_lands"
+    
+    property_id: UUID = Field(primary_key=True, foreign_key="properties.id")
+    land_area: Optional[float] = Field(default=None)
+    floors_in_house: Optional[int] = Field(default=None)
+    house_material: Optional[str] = Field(default=None, max_length=20)
+    year_built: Optional[int] = Field(default=None)
+    has_fence: Optional[bool] = Field(default=None)
+    garage_on_plot: Optional[bool] = Field(default=None)
+    bathhouse_on_plot: Optional[bool] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="house_land")
+
+
+class PropertyMedia(SQLModel, table=True):
+    __tablename__ = "property_media"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    property_id: UUID = Field(foreign_key="properties.id")
+    layout_image_url: Optional[str] = Field(default=None)
+    vr_tour_url: Optional[str] = Field(default=None)
+    video_url: Optional[str] = Field(default=None)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="media")
+
+
+class PromoTag(SQLModel, table=True):
+    __tablename__ = "promo_tags"
+    
+    id: Optional[int] = Field(default=None, primary_key=True)
+    property_id: UUID = Field(foreign_key="properties.id")
+    tag: str = Field(max_length=50)
+    
+    # Relationships
+    property: Property = Relationship(back_populates="promo_tags")
+
+
+class MortgageProgram(SQLModel, table=True):
+    __tablename__ = "mortgage_programs"
+    
+    id: Optional[UUID] = Field(default_factory=uuid4, primary_key=True)
+    property_id: UUID = Field(foreign_key="properties.id")
+    
+    # Relationships
+    property: Property = Relationship(back_populates="mortgage_programs")
 
 
 class PriceHistory(SQLModel, table=True):
     __tablename__ = "price_history"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    apartment_id: int = Field(foreign_key="apartments.id")
+    property_id: UUID = Field(foreign_key="properties.id")
     changed_at: datetime = Field(default_factory=datetime.utcnow)
     old_price: float
     new_price: float
     reason: PriceChangeReason
-    description: Optional[str] = None
+    description: Optional[str] = Field(default=None)
     
     # Relationships
-    apartment: Apartment = Relationship(back_populates="price_history")
+    property: Property = Relationship(back_populates="price_history")
 
 
 class ViewsLog(SQLModel, table=True):
     __tablename__ = "views_log"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    apartment_id: int = Field(foreign_key="apartments.id")
+    property_id: UUID = Field(foreign_key="properties.id")
     user_id: Optional[int] = Field(default=None, foreign_key="users.id")
     event: ViewEvent
     occurred_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    apartment: Apartment = Relationship(back_populates="views_logs")
+    property: Property = Relationship(back_populates="views_logs")
     user: Optional[User] = Relationship(back_populates="views_logs")
-
-
-class ApartmentStats(SQLModel, table=True):
-    __tablename__ = "apartment_stats"
-    
-    apartment_id: int = Field(primary_key=True, foreign_key="apartments.id")
-    views_24h: int = Field(default=0)
-    leads_24h: int = Field(default=0)
-    bookings_24h: int = Field(default=0)
-    days_on_site: int = Field(default=0)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Relationships
-    apartment: Apartment = Relationship(back_populates="stats")
 
 
 class Booking(SQLModel, table=True):
     __tablename__ = "bookings"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    apartment_id: int = Field(foreign_key="apartments.id")
+    property_id: UUID = Field(foreign_key="properties.id")
     user_id: int = Field(foreign_key="users.id")
     status: BookingStatus = Field(default=BookingStatus.ACTIVE)
     booked_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
-    apartment: Apartment = Relationship(back_populates="bookings")
+    property: Property = Relationship(back_populates="bookings")
     user: User = Relationship(back_populates="bookings")
 
 
@@ -206,7 +337,7 @@ class Promotion(SQLModel, table=True):
     discount_percent: float
     starts_at: datetime
     ends_at: datetime
-    conditions: Optional[str] = None  # JSONB as string
+    conditions: Optional[str] = Field(default=None)  # JSONB as string
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 

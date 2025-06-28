@@ -1,540 +1,163 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
+from uuid import UUID
+
 from app.database import get_async_session
-from app.models import Project, Building, Apartment, PropertyClass, User
-from app.schemas import (
-    ProjectResponse, ProjectCreate, ProjectUpdate,
-    BuildingResponse, BuildingCreate, BuildingUpdate,
-    ApartmentResponse
-)
-from app.crud import CRUDProject, CRUDBuilding, CRUDApartment
-from app.security import get_current_active_user, get_current_business
+from app.crud import crud_project
+from app.schemas import ProjectCreate, ProjectUpdate, ProjectResponse
+from app.security import get_current_user
+from app.models import User
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-project_crud = CRUDProject(Project)
-building_crud = CRUDBuilding(Building)
-apartment_crud = CRUDApartment(Apartment)
 
-
-@router.post("", response_model=ProjectResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
-})
-async def create_project(
-    project_data: ProjectCreate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
-):
-    """
-    Создать новый проект
-    
-    Args:
-        project_data: Данные для создания проекта
-        
-    Returns:
-        ProjectResponse: Созданный проект
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        400: Bad Request - Некорректные данные
-    """
-    return await project_crud.create(db, project_data.dict())
-
-
-@router.get("", response_model=List[ProjectResponse])
+@router.get("/", response_model=List[ProjectResponse])
 async def get_projects(
-    city: Optional[str] = None,
-    property_class: Optional[PropertyClass] = None,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    developer_id: Optional[UUID] = None,
+    name: Optional[str] = None,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить список проектов"""
-    if city:
-        return await project_crud.get_by_city(db, city)
-    elif property_class:
-        return await project_crud.get_by_class(db, property_class)
-    return await project_crud.get_multi(db, skip=skip, limit=limit)
+    """
+    Получить список проектов с фильтрацией
+    """
+    try:
+        projects = await crud_project.get_multi(db, skip=skip, limit=limit)
+        
+        # Применяем фильтры
+        if developer_id:
+            projects = [p for p in projects if p.developer_id == developer_id]
+        if name:
+            projects = [p for p in projects if name.lower() in p.name.lower()]
+        
+        return projects
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении проектов: {str(e)}"
+        )
 
 
 @router.get("/{project_id}", response_model=ProjectResponse)
 async def get_project(
-    project_id: int,
+    project_id: UUID,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить проект по ID"""
-    db_project = await project_crud.get(db, project_id)
-    if not db_project:
+    """
+    Получить информацию о проекте
+    """
+    try:
+        project = await crud_project.get(db, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Проект не найден"
+            )
+        return project
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении проекта: {str(e)}"
         )
-    return db_project
 
 
-@router.put("/{project_id}", response_model=ProjectResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Проект не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Project not found"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
-})
+@router.post("/", response_model=ProjectResponse, status_code=status.HTTP_201_CREATED)
+async def create_project(
+    project_data: ProjectCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Создать новый проект
+    """
+    try:
+        # Проверяем права доступа
+        if current_user.role not in ["admin", "developer"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для создания проекта"
+            )
+        
+        project = await crud_project.create(db, project_data.dict())
+        return project
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при создании проекта: {str(e)}"
+        )
+
+
+@router.put("/{project_id}", response_model=ProjectResponse)
 async def update_project(
-    project_id: int,
+    project_id: UUID,
     project_data: ProjectUpdate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Обновить проект
-    
-    Args:
-        project_id: ID проекта
-        project_data: Данные для обновления
-        
-    Returns:
-        ProjectResponse: Обновленный проект
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Проект не найден
-        400: Bad Request - Некорректные данные
     """
-    db_project = await project_crud.get(db, project_id)
-    if not db_project:
+    try:
+        # Проверяем права доступа
+        if current_user.role not in ["admin", "developer"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для обновления проекта"
+            )
+        
+        project = await crud_project.get(db, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Проект не найден"
+            )
+        
+        updated_project = await crud_project.update(db, project, project_data.dict(exclude_unset=True))
+        return updated_project
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при обновлении проекта: {str(e)}"
         )
-    return await project_crud.update(db, db_project, project_data.dict(exclude_unset=True))
 
 
-@router.delete("/{project_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Проект не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Project not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Проект успешно удален",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Project deleted"
-                }
-            }
-        }
-    }
-})
+@router.delete("/{project_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_project(
-    project_id: int,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    project_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Удалить проект
-    
-    Args:
-        project_id: ID проекта
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Проект не найден
     """
-    if not await project_crud.delete(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    return {"message": "Project deleted"}
-
-
-@router.post("/{project_id}/buildings", response_model=BuildingResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Проект не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Project not found"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
-})
-async def create_building(
-    project_id: int,
-    building_data: BuildingCreate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
-):
-    """
-    Создать новый корпус в проекте
-    
-    Args:
-        project_id: ID проекта
-        building_data: Данные для создания корпуса
+    try:
+        # Проверяем права доступа
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для удаления проекта"
+            )
         
-    Returns:
-        BuildingResponse: Созданный корпус
+        project = await crud_project.get(db, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Проект не найден"
+            )
         
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Проект не найден
-        400: Bad Request - Некорректные данные
-    """
-    # Проверяем существование проекта
-    if not await project_crud.get(db, project_id):
+        await crud_project.delete(db, project_id)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    building_dict = building_data.dict()
-    building_dict["project_id"] = project_id
-    return await building_crud.create(db, building_dict)
-
-
-@router.get("/{project_id}/buildings", response_model=List[BuildingResponse])
-async def get_project_buildings(
-    project_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить список корпусов проекта"""
-    if not await project_crud.get(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    return await building_crud.get_by_project(db, project_id)
-
-
-@router.get("/{project_id}/buildings/{building_id}", response_model=BuildingResponse)
-async def get_building(
-    project_id: int,
-    building_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить корпус по ID"""
-    if not await project_crud.get(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    db_building = await building_crud.get(db, building_id)
-    if not db_building or db_building.project_id != project_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Building not found"
-        )
-    return db_building
-
-
-@router.put("/{project_id}/buildings/{building_id}", response_model=BuildingResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Проект или корпус не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Project not found"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
-})
-async def update_building(
-    project_id: int,
-    building_id: int,
-    building_data: BuildingUpdate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
-):
-    """
-    Обновить корпус
-    
-    Args:
-        project_id: ID проекта
-        building_id: ID корпуса
-        building_data: Данные для обновления
-        
-    Returns:
-        BuildingResponse: Обновленный корпус
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Проект или корпус не найден
-        400: Bad Request - Некорректные данные
-    """
-    if not await project_crud.get(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    db_building = await building_crud.get(db, building_id)
-    if not db_building or db_building.project_id != project_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Building not found"
-        )
-    return await building_crud.update(db, db_building, building_data.dict(exclude_unset=True))
-
-
-@router.delete("/{project_id}/buildings/{building_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Проект или корпус не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Project not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Корпус успешно удален",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Building deleted"
-                }
-            }
-        }
-    }
-})
-async def delete_building(
-    project_id: int,
-    building_id: int,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
-):
-    """
-    Удалить корпус
-    
-    Args:
-        project_id: ID проекта
-        building_id: ID корпуса
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Проект или корпус не найден
-    """
-    if not await project_crud.get(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    db_building = await building_crud.get(db, building_id)
-    if not db_building or db_building.project_id != project_id:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Building not found"
-        )
-    
-    await building_crud.delete(db, building_id)
-    return {"message": "Building deleted"}
-
-
-@router.get("/{project_id}/buildings/{building_id}/apartments", response_model=List[ApartmentResponse])
-async def get_building_apartments(
-    project_id: int,
-    building_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить список квартир в корпусе"""
-    if not await project_crud.get(db, project_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Project not found"
-        )
-    
-    if not await building_crud.get(db, building_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Building not found"
-        )
-    
-    return await apartment_crud.get_by_building(db, building_id) 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при удалении проекта: {str(e)}"
+        ) 

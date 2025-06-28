@@ -1,16 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
+from uuid import UUID
 from app.database import get_async_session
-from app.models import Booking, Apartment, BookingStatus, User
+from app.models import Booking, Property, BookingStatus, User
 from app.schemas import BookingResponse, BookingCreate, BookingUpdate
-from app.crud import CRUDBooking, CRUDApartment
+from app.crud import crud_booking, crud_property
 from app.security import get_current_active_user
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
-
-booking_crud = CRUDBooking(Booking)
-apartment_crud = CRUDApartment(Apartment)
 
 
 @router.post("", response_model=BookingResponse, responses={
@@ -35,21 +33,21 @@ apartment_crud = CRUDApartment(Apartment)
         }
     },
     404: {
-        "description": "Квартира не найдена",
+        "description": "Объект недвижимости не найден",
         "content": {
             "application/json": {
                 "example": {
-                    "detail": "Apartment not found"
+                    "detail": "Property not found"
                 }
             }
         }
     },
     400: {
-        "description": "Квартира уже забронирована",
+        "description": "Объект уже забронирован",
         "content": {
             "application/json": {
                 "example": {
-                    "detail": "Apartment is already booked"
+                    "detail": "Property is already booked"
                 }
             }
         }
@@ -72,27 +70,27 @@ async def create_booking(
     Raises:
         401: Unauthorized - Не авторизован
         403: Forbidden - Недостаточно прав
-        404: Not Found - Квартира не найдена
-        400: Bad Request - Квартира уже забронирована
+        404: Not Found - Объект недвижимости не найден
+        400: Bad Request - Объект уже забронирован
     """
-    # Проверяем существование квартиры
-    apartment = await apartment_crud.get(db, booking_data.apartment_id)
-    if not apartment:
+    # Проверяем существование объекта недвижимости
+    property_obj = await crud_property.get(db, booking_data.property_id)
+    if not property_obj:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Apartment not found"
+            detail="Property not found"
         )
     
-    # Проверяем, не забронирована ли уже квартира
-    existing_bookings = await booking_crud.get_by_apartment(db, booking_data.apartment_id)
+    # Проверяем, не забронирован ли уже объект
+    existing_bookings = await crud_booking.get_by_property(db, booking_data.property_id)
     active_bookings = [b for b in existing_bookings if b.status == BookingStatus.ACTIVE]
     if active_bookings:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Apartment is already booked"
+            detail="Property is already booked"
         )
     
-    return await booking_crud.create(db, booking_data.dict())
+    return await crud_booking.create(db, booking_data.dict())
 
 
 @router.get("", response_model=List[BookingResponse])
@@ -104,8 +102,8 @@ async def get_bookings(
 ):
     """Получить список бронирований"""
     if status:
-        return await booking_crud.get_by_status(db, status)
-    return await booking_crud.get_multi(db, skip=skip, limit=limit)
+        return await crud_booking.get_by_status(db, status)
+    return await crud_booking.get_multi(db, skip=skip, limit=limit)
 
 
 @router.get("/{booking_id}", response_model=BookingResponse)
@@ -114,7 +112,7 @@ async def get_booking(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить бронирование по ID"""
-    db_booking = await booking_crud.get(db, booking_id)
+    db_booking = await crud_booking.get(db, booking_id)
     if not db_booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -187,13 +185,13 @@ async def update_booking(
         404: Not Found - Бронирование не найдено
         400: Bad Request - Некорректные данные
     """
-    db_booking = await booking_crud.get(db, booking_id)
+    db_booking = await crud_booking.get(db, booking_id)
     if not db_booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Booking not found"
         )
-    return await booking_crud.update(db, db_booking, booking_data.dict(exclude_unset=True))
+    return await crud_booking.update(db, db_booking, booking_data.dict(exclude_unset=True))
 
 
 @router.delete("/{booking_id}", responses={
@@ -257,11 +255,14 @@ async def delete_booking(
         403: Forbidden - Недостаточно прав
         404: Not Found - Бронирование не найдено
     """
-    if not await booking_crud.delete(db, booking_id):
+    db_booking = await crud_booking.get(db, booking_id)
+    if not db_booking:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Booking not found"
         )
+    
+    await crud_booking.delete(db, booking_id)
     return {"message": "Booking deleted"}
 
 
@@ -271,35 +272,23 @@ async def get_user_bookings(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить бронирования пользователя"""
-    return await booking_crud.get_by_user(db, user_id)
+    return await crud_booking.get_by_user(db, user_id)
 
 
-@router.get("/apartment/{apartment_id}", response_model=List[BookingResponse])
-async def get_apartment_bookings(
-    apartment_id: int,
+@router.get("/property/{property_id}", response_model=List[BookingResponse])
+async def get_property_bookings(
+    property_id: UUID,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить бронирования квартиры"""
-    # Проверяем существование квартиры
-    if not await apartment_crud.get(db, apartment_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Apartment not found"
-        )
-    return await booking_crud.get_by_apartment(db, apartment_id)
+    """Получить бронирования объекта недвижимости"""
+    return await crud_booking.get_by_property(db, property_id)
 
 
-@router.get("/apartment/{apartment_id}/recent", response_model=List[BookingResponse])
-async def get_recent_apartment_bookings(
-    apartment_id: int,
+@router.get("/property/{property_id}/recent", response_model=List[BookingResponse])
+async def get_recent_property_bookings(
+    property_id: UUID,
     hours: int = 24,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить недавние бронирования квартиры"""
-    # Проверяем существование квартиры
-    if not await apartment_crud.get(db, apartment_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Apartment not found"
-        )
-    return await booking_crud.get_recent_bookings(db, apartment_id, hours=hours) 
+    """Получить недавние бронирования объекта недвижимости"""
+    return await crud_booking.get_recent_bookings(db, property_id, hours) 
