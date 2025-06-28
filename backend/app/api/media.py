@@ -5,14 +5,14 @@ from uuid import UUID
 
 from app.database import get_async_session
 from app.crud import crud_property_media
-from app.schemas import PropertyMediaCreate, PropertyMediaUpdate, PropertyMediaResponse
+from app.schemas import PropertyMediaCreate, PropertyMediaUpdate, PropertyMediaRead
 from app.security import get_current_user
 from app.models import User
 
 router = APIRouter(prefix="/media", tags=["media"])
 
 
-@router.get("/", response_model=List[PropertyMediaResponse])
+@router.get("/", response_model=List[PropertyMediaRead])
 async def get_media(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -40,7 +40,7 @@ async def get_media(
         )
 
 
-@router.get("/{media_id}", response_model=PropertyMediaResponse)
+@router.get("/{media_id}", response_model=PropertyMediaRead)
 async def get_media_item(
     media_id: UUID,
     db: AsyncSession = Depends(get_async_session)
@@ -65,7 +65,7 @@ async def get_media_item(
         )
 
 
-@router.post("/", response_model=PropertyMediaResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PropertyMediaRead, status_code=status.HTTP_201_CREATED)
 async def create_media(
     media_data: PropertyMediaCreate,
     current_user: User = Depends(get_current_user),
@@ -93,7 +93,7 @@ async def create_media(
         )
 
 
-@router.put("/{media_id}", response_model=PropertyMediaResponse)
+@router.put("/{media_id}", response_model=PropertyMediaRead)
 async def update_media(
     media_id: UUID,
     media_data: PropertyMediaUpdate,

@@ -5,14 +5,14 @@ from uuid import UUID
 
 from app.database import get_async_session
 from app.crud import crud_property_address
-from app.schemas import PropertyAddressCreate, PropertyAddressUpdate, PropertyAddressResponse
+from app.schemas import PropertyAddressCreate, PropertyAddressUpdate, PropertyAddressRead
 from app.security import get_current_user
 from app.models import User
 
 router = APIRouter(prefix="/addresses", tags=["addresses"])
 
 
-@router.get("/", response_model=List[PropertyAddressResponse])
+@router.get("/", response_model=List[PropertyAddressRead])
 async def get_addresses(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
@@ -40,7 +40,7 @@ async def get_addresses(
         )
 
 
-@router.get("/{address_id}", response_model=PropertyAddressResponse)
+@router.get("/{address_id}", response_model=PropertyAddressRead)
 async def get_address(
     address_id: UUID,
     db: AsyncSession = Depends(get_async_session)
@@ -65,7 +65,7 @@ async def get_address(
         )
 
 
-@router.post("/", response_model=PropertyAddressResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PropertyAddressRead, status_code=status.HTTP_201_CREATED)
 async def create_address(
     address_data: PropertyAddressCreate,
     current_user: User = Depends(get_current_user),
@@ -93,7 +93,7 @@ async def create_address(
         )
 
 
-@router.put("/{address_id}", response_model=PropertyAddressResponse)
+@router.put("/{address_id}", response_model=PropertyAddressRead)
 async def update_address(
     address_id: UUID,
     address_data: PropertyAddressUpdate,

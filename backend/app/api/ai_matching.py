@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database import get_async_session
-from app.schemas import PropertyResponse, PropertyMatchRequest
+from app.schemas import PropertyFullResponse, PropertyMatchRequest
 from app.services.ai_matching import PropertyMatchingService
 from app.models import User
 from app.security import get_current_active_user
@@ -15,7 +15,7 @@ async def get_matching_service(db: AsyncSession = Depends(get_async_session)) ->
     return PropertyMatchingService(db)
 
 
-@router.post("/properties", response_model=List[PropertyResponse], responses={
+@router.post("/properties", response_model=List[PropertyFullResponse], responses={
     401: {
         "description": "Не авторизован",
         "content": {
@@ -61,7 +61,7 @@ async def match_properties_for_user(
         limit: Количество рекомендаций
         
     Returns:
-        List[PropertyResponse]: Список подобранных объектов
+        List[PropertyFullResponse]: Список подобранных объектов
         
     Raises:
         401: Unauthorized - Не авторизован

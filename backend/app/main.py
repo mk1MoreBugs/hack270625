@@ -16,7 +16,7 @@ security = HTTPBasic()
 
 
 def verify_docs_access(credentials: HTTPBasicCredentials = Depends(security)):
-    """Проверяет доступ к документации"""
+    """Проверка доступа к документации API"""
     is_username_correct = secrets.compare_digest(
         credentials.username.encode("utf8"),
         settings.docs_username.encode("utf8")
@@ -37,101 +37,113 @@ def verify_docs_access(credentials: HTTPBasicCredentials = Depends(security)):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Lifespan контекст для инициализации и очистки"""
+    """Жизненный цикл приложения для инициализации и очистки"""
     # Startup
     await create_db_and_tables()
-    print("🚀 Приложение Недвижимость 4.0 запущено!")
+    print("🚀 Real Estate 4.0 API запущен!")
     print(f"📚 Документация API: http://localhost:8000/docs")
     print(f"🔍 ReDoc: http://localhost:8000/redoc")
     
     yield
     
     # Shutdown
-    print("🛑 Приложение Недвижимость 4.0 остановлено!")
+    print("🛑 Real Estate 4.0 API остановлен!")
 
 
-# Создаем FastAPI приложение
+# Create FastAPI application
 app = FastAPI(
-    title="Недвижимость 4.0 API",
-    description="API для платформы динамического ценообразования в недвижимости",
-    version="1.0.0",
+    title="Real Estate 4.0 API",
+    description="API для платформы динамического ценообразования в сфере недвижимости",
+    version=settings.version,
     lifespan=lifespan,
     openapi_url=f"{settings.api_v1_str}/openapi.json",
-    #docs_url=None,  # Отключаем стандартные эндпоинты
-    #redoc_url=None  # Отключаем стандартные эндпоинты
+    #docs_url=None,  # Disable default endpoints
+    #redoc_url=None  # Disable default endpoints
 )
 
-# Настройка CORS
+# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # В продакшене указать конкретные домены
+    allow_origins=settings.allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Подключаем все роутеры
-app.include_router(auth.router, prefix="/api/v1")
-app.include_router(users.router, prefix="/api/v1")
-app.include_router(developers.router, prefix="/api/v1")
-app.include_router(projects.router, prefix="/api/v1")
-app.include_router(buildings.router, prefix="/api/v1")
-app.include_router(properties.router, prefix="/api/v1")
-app.include_router(addresses.router, prefix="/api/v1")
-app.include_router(prices.router, prefix="/api/v1")
-app.include_router(media.router, prefix="/api/v1")
-app.include_router(bookings.router, prefix="/api/v1")
-app.include_router(promotions.router, prefix="/api/v1")
-app.include_router(analytics.router, prefix="/api/v1")
-app.include_router(dynamic_pricing.router, prefix="/api/v1")
-app.include_router(ai_matching.router, prefix="/api/v1")
-app.include_router(map.router, prefix="/api/v1")
-app.include_router(webhooks.router, prefix="/api/v1")
+# Include all routers
+app.include_router(auth.router, prefix=settings.api_v1_str)
+app.include_router(users.router, prefix=settings.api_v1_str)
+app.include_router(developers.router, prefix=settings.api_v1_str)
+app.include_router(projects.router, prefix=settings.api_v1_str)
+app.include_router(buildings.router, prefix=settings.api_v1_str)
+app.include_router(properties.router, prefix=settings.api_v1_str)
+app.include_router(addresses.router, prefix=settings.api_v1_str)
+app.include_router(prices.router, prefix=settings.api_v1_str)
+app.include_router(media.router, prefix=settings.api_v1_str)
+app.include_router(bookings.router, prefix=settings.api_v1_str)
+app.include_router(promotions.router, prefix=settings.api_v1_str)
+app.include_router(analytics.router, prefix=settings.api_v1_str)
+app.include_router(dynamic_pricing.router, prefix=settings.api_v1_str)
+app.include_router(ai_matching.router, prefix=settings.api_v1_str)
+app.include_router(map.router, prefix=settings.api_v1_str)
+app.include_router(webhooks.router, prefix=settings.api_v1_str)
 
 
-@app.get("/")
+@app.get(
+    "/",
+    tags=["default"],
+    summary="Корневой эндпоинт",
+    description="Возвращает основную информацию о сервисе"
+)
 async def root():
     """Корневой эндпоинт"""
     return {
-        "name": "Недвижимость 4.0 API",
-        "version": "1.0.0",
+        "name": settings.project_name,
+        "version": settings.version,
         "docs_url": "/docs",
         "redoc_url": "/redoc"
     }
 
 
-@app.get("/health")
+@app.get(
+    "/health",
+    tags=["default"],
+    summary="Проверка здоровья",
+    description="Проверка работоспособности приложения"
+)
 async def health_check():
-    """Проверка здоровья приложения"""
+    """Проверка работоспособности приложения"""
     return {
         "status": "healthy",
-        "service": "Недвижимость 4.0",
+        "service": settings.project_name,
         "version": settings.version,
         "timestamp": "2024-01-01T00:00:00Z"
     }
 
 
-# Создаем защищенные эндпоинты для документации
+# Create protected documentation endpoints
 @app.get("/docs", include_in_schema=False)
 async def get_swagger_ui_html(credentials: HTTPBasicCredentials = Depends(verify_docs_access)):
-    """Защищенный эндпоинт для Swagger UI"""
+    """Защищенный эндпоинт Swagger UI"""
     from fastapi.openapi.docs import get_swagger_ui_html
     return get_swagger_ui_html(
         openapi_url=f"{settings.api_v1_str}/openapi.json",
         title=f"{settings.project_name} - Swagger UI"
     )
 
+
 @app.get("/redoc", include_in_schema=False)
 async def get_redoc_html(credentials: HTTPBasicCredentials = Depends(verify_docs_access)):
-    """Защищенный эндпоинт для ReDoc"""
+    """Защищенный эндпоинт ReDoc"""
     from fastapi.openapi.docs import get_redoc_html
     return get_redoc_html(
         openapi_url=f"{settings.api_v1_str}/openapi.json",
         title=f"{settings.project_name} - ReDoc"
     )
 
+
 @app.get(f"{settings.api_v1_str}/openapi.json", include_in_schema=False)
 async def get_openapi_json(credentials: HTTPBasicCredentials = Depends(verify_docs_access)):
-    """Защищенный эндпоинт для OpenAPI JSON"""
+    """Защищенный эндпоинт OpenAPI JSON"""
     return app.openapi()
  

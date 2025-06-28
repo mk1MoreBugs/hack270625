@@ -1,160 +1,212 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import Session, select
 from typing import List, Optional
 from uuid import UUID
 
 from app.database import get_async_session
-from app.crud import crud_developer
-from app.schemas import DeveloperCreate, DeveloperUpdate, DeveloperResponse
-from app.security import get_current_user
-from app.models import User
+from app.models import Developer
+from app.security import get_current_user, get_current_admin_user
+from app.schemas import DeveloperCreate, DeveloperRead, DeveloperUpdate, Message
 
 router = APIRouter(prefix="/developers", tags=["developers"])
 
 
-@router.get("/", response_model=List[DeveloperResponse])
+@router.get("", response_model=List[DeveloperRead])
 async def get_developers(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    *,
+    session: Session = Depends(get_async_session),
+    skip: int = 0,
+    limit: int = 100,
     name: Optional[str] = None,
-    db: AsyncSession = Depends(get_async_session)
+    sort_by: Optional[str] = "created_at",
+    sort_desc: bool = True
 ):
     """
-    Получить список застройщиков с фильтрацией
+    Get list of developers with optional filtering and sorting.
+    
+    Parameters:
+    - skip: Number of records to skip (pagination)
+    - limit: Maximum number of records to return
+    - name: Filter by developer name (case-insensitive partial match)
+    - sort_by: Sort field (created_at, name)
+    - sort_desc: Sort in descending order
+    
+    Returns:
+    - List of developers matching the criteria
     """
-    try:
-        developers = await crud_developer.get_multi(db, skip=skip, limit=limit)
+    query = select(Developer)
+    
+    if name:
+        query = query.where(Developer.name.ilike(f"%{name}%"))
         
-        # Применяем фильтры
-        if name:
-            developers = [d for d in developers if name.lower() in d.name.lower()]
+    if sort_by == "created_at":
+        query = query.order_by(Developer.created_at.desc() if sort_desc else Developer.created_at)
+    elif sort_by == "name":
+        query = query.order_by(Developer.name.desc() if sort_desc else Developer.name)
         
-        return developers
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении застройщиков: {str(e)}"
-        )
+    query = query.offset(skip).limit(limit)
+    result = await session.execute(query)
+    return result.scalars().all()
 
 
-@router.get("/{developer_id}", response_model=DeveloperResponse)
+@router.get("/{developer_id}", response_model=DeveloperRead)
 async def get_developer(
-    developer_id: UUID,
-    db: AsyncSession = Depends(get_async_session)
+    *,
+    session: Session = Depends(get_async_session),
+    developer_id: UUID
 ):
     """
-    Получить информацию о застройщике
+    Get a specific developer by ID.
+    
+    Parameters:
+    - developer_id: UUID of the developer
+    
+    Returns:
+    - Developer details
+    
+    Raises:
+    - 404: Developer not found
     """
-    try:
-        developer = await crud_developer.get(db, developer_id)
-        if not developer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Застройщик не найден"
-            )
-        return developer
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении застройщика: {str(e)}"
-        )
+    result = await session.execute(
+        select(Developer).where(Developer.id == developer_id)
+    )
+    developer = result.scalar_one_or_none()
+    if not developer:
+        raise HTTPException(status_code=404, detail="Developer not found")
+    return developer
 
 
-@router.post("/", response_model=DeveloperResponse, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=DeveloperRead, status_code=201)
 async def create_developer(
-    developer_data: DeveloperCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
+    *,
+    session: Session = Depends(get_async_session),
+    _: dict = Depends(get_current_admin_user),
+    developer: DeveloperCreate
 ):
     """
-    Создать нового застройщика
-    """
-    try:
-        # Проверяем права доступа
-        if current_user.role not in ["admin", "developer"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для создания застройщика"
-            )
+    Create a new developer.
+    
+    Parameters:
+    - developer: Developer data
         
-        developer = await crud_developer.create(db, developer_data.dict())
-        return developer
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при создании застройщика: {str(e)}"
+    Returns:
+    - Created developer
+    
+    Security:
+    - Requires admin role
+        
+    Raises:
+    - 401: Unauthorized
+    - 403: Forbidden (not admin)
+    - 409: Developer with same external_id already exists
+    """
+    # Check for external_id uniqueness
+    if developer.external_id:
+        result = await session.execute(
+            select(Developer).where(Developer.external_id == developer.external_id)
         )
+        existing = result.scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="Developer with this external_id already exists"
+            )
+    
+    db_developer = Developer.from_orm(developer)
+    session.add(db_developer)
+    await session.commit()
+    await session.refresh(db_developer)
+    return db_developer
 
 
-@router.put("/{developer_id}", response_model=DeveloperResponse)
+@router.put("/{developer_id}", response_model=DeveloperRead)
 async def update_developer(
+    *,
+    session: Session = Depends(get_async_session),
+    _: dict = Depends(get_current_admin_user),
     developer_id: UUID,
-    developer_data: DeveloperUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
+    developer: DeveloperUpdate
 ):
     """
-    Обновить застройщика
+    Update a developer.
+    
+    Parameters:
+    - developer_id: UUID of the developer to update
+    - developer: Updated developer data
+        
+    Returns:
+    - Updated developer
+    
+    Security:
+    - Requires admin role
+        
+    Raises:
+    - 401: Unauthorized
+    - 403: Forbidden (not admin)
+    - 404: Developer not found
+    - 409: External ID conflict with existing developer
     """
-    try:
-        # Проверяем права доступа
-        if current_user.role not in ["admin", "developer"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для обновления застройщика"
-            )
-        
-        developer = await crud_developer.get(db, developer_id)
-        if not developer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Застройщик не найден"
-            )
-        
-        updated_developer = await crud_developer.update(db, developer, developer_data.dict(exclude_unset=True))
-        return updated_developer
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при обновлении застройщика: {str(e)}"
+    result = await session.execute(
+        select(Developer).where(Developer.id == developer_id)
+    )
+    db_developer = result.scalar_one_or_none()
+    if not db_developer:
+        raise HTTPException(status_code=404, detail="Developer not found")
+    
+    # Check for external_id uniqueness
+    if developer.external_id and developer.external_id != db_developer.external_id:
+        result = await session.execute(
+            select(Developer).where(Developer.external_id == developer.external_id)
         )
+        existing = result.scalar_one_or_none()
+        if existing:
+            raise HTTPException(
+                status_code=409,
+                detail="Developer with this external_id already exists"
+            )
+    
+    developer_data = developer.dict(exclude_unset=True)
+    for key, value in developer_data.items():
+        setattr(db_developer, key, value)
+    
+    session.add(db_developer)
+    await session.commit()
+    await session.refresh(db_developer)
+    return db_developer
 
 
-@router.delete("/{developer_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{developer_id}", response_model=Message)
 async def delete_developer(
-    developer_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
+    *,
+    session: Session = Depends(get_async_session),
+    _: dict = Depends(get_current_admin_user),
+    developer_id: UUID
 ):
     """
-    Удалить застройщика
+    Delete a developer.
+    
+    Parameters:
+    - developer_id: UUID of the developer to delete
+        
+    Returns:
+    - Success message
+    
+    Security:
+    - Requires admin role
+        
+    Raises:
+    - 401: Unauthorized
+    - 403: Forbidden (not admin)
+    - 404: Developer not found
     """
-    try:
-        # Проверяем права доступа
-        if current_user.role != "admin":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для удаления застройщика"
-            )
-        
-        developer = await crud_developer.get(db, developer_id)
-        if not developer:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Застройщик не найден"
-            )
-        
-        await crud_developer.delete(db, developer_id)
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при удалении застройщика: {str(e)}"
-        ) 
+    result = await session.execute(
+        select(Developer).where(Developer.id == developer_id)
+    )
+    developer = result.scalar_one_or_none()
+    if not developer:
+        raise HTTPException(status_code=404, detail="Developer not found")
+    
+    await session.delete(developer)
+    await session.commit()
+    
+    return Message(message="Developer successfully deleted") 

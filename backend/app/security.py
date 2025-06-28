@@ -1,14 +1,16 @@
 from datetime import datetime, timedelta
 from typing import Optional, Dict, Any
 import bcrypt
-import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+import jwt
 from app.database import get_async_session
 from app.models import User, UserRole
 from app.crud import CRUDUser
 from app.config import settings
+from app.schemas import TokenData
 
 # Настройки JWT
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 минут
@@ -16,21 +18,21 @@ REFRESH_TOKEN_EXPIRE_DAYS = 30    # 30 дней
 ALGORITHM = "HS256"
 
 # OAuth2 scheme для получения токена из заголовка
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
-
-
-def get_password_hash(password: str) -> str:
-    """Создает хеш пароля"""
-    salt = bcrypt.gensalt()
-    return bcrypt.hashpw(password.encode(), salt).decode()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Проверяет соответствие пароля хешу"""
+    """Verify a password against its hash"""
     return bcrypt.checkpw(
-        plain_password.encode(),
-        hashed_password.encode()
+        plain_password.encode('utf-8'),
+        hashed_password.encode('utf-8')
     )
+
+
+def get_password_hash(password: str) -> str:
+    """Get password hash"""
+    salt = bcrypt.gensalt()
+    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 
 def create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
@@ -41,12 +43,16 @@ def create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
     return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
 
 
-def create_access_token(user_id: int, role: UserRole) -> str:
-    """Создает access token"""
-    return create_token(
-        {"sub": str(user_id), "role": role.value},
-        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    )
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """Create JWT access token"""
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    return encoded_jwt
 
 
 def create_refresh_token(user_id: int) -> str:
@@ -59,29 +65,29 @@ def create_refresh_token(user_id: int) -> str:
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ) -> User:
-    """Получает текущего пользователя по токену"""
+    """Get current user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    
     try:
         payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
-        user_id = int(payload.get("sub"))
-        if user_id is None:
+        email: str = payload.get("sub")
+        if email is None:
             raise credentials_exception
+        token_data = TokenData(email=email)
     except jwt.PyJWTError:
         raise credentials_exception
     
-    user_crud = CRUDUser(User)
-    user = await user_crud.get(db, user_id)
-    
+    result = await session.execute(
+        select(User).where(User.email == token_data.email)
+    )
+    user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
-    
     return user
 
 
@@ -117,3 +123,14 @@ get_current_admin = check_role_access([UserRole.ADMIN])
 # Комбинированные проверки ролей
 get_current_staff = check_role_access([UserRole.ADMIN])
 get_current_business = check_role_access([UserRole.DEVELOPER, UserRole.ADMIN]) 
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """Get current user and verify they have admin role"""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions"
+        )
+    return current_user 

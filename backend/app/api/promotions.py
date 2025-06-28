@@ -1,48 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 from app.database import get_async_session
 from app.models import Promotion, User
-from app.schemas import PromotionResponse, PromotionCreate, PromotionUpdate
+from app.schemas import (
+    PromotionRead, PromotionCreate, PromotionUpdate,
+    Message
+)
 from app.crud import CRUDPromotion
-from app.security import get_current_active_user, get_current_business
+from app.security import get_current_active_user, get_current_business, get_current_admin_user
 from datetime import datetime
 
 router = APIRouter(prefix="/promotions", tags=["promotions"])
 promotion_crud = CRUDPromotion(Promotion)
 
 
-@router.post("", response_model=PromotionResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
+@router.post("", response_model=PromotionRead, responses={
+    201: {"description": "Акция создана"},
+    400: {"description": "Некорректные данные"},
+    401: {"description": "Не авторизован"},
+    403: {"description": "Нет прав доступа"}
 })
 async def create_promotion(
     promotion_data: PromotionCreate,
@@ -56,7 +33,7 @@ async def create_promotion(
         promotion_data: Данные для создания акции
         
     Returns:
-        PromotionResponse: Созданная акция
+        PromotionRead: Созданная акция
         
     Raises:
         401: Unauthorized - Не авторизован
@@ -66,7 +43,7 @@ async def create_promotion(
     return await promotion_crud.create(db, promotion_data.dict())
 
 
-@router.get("", response_model=List[PromotionResponse])
+@router.get("", response_model=List[PromotionRead])
 async def get_promotions(
     skip: int = 0,
     limit: int = 100,
@@ -76,7 +53,7 @@ async def get_promotions(
     return await promotion_crud.get_multi(db, skip=skip, limit=limit)
 
 
-@router.get("/active", response_model=List[PromotionResponse])
+@router.get("/active", response_model=List[PromotionRead])
 async def get_active_promotions(
     db: AsyncSession = Depends(get_async_session)
 ):
@@ -84,7 +61,7 @@ async def get_active_promotions(
     return await promotion_crud.get_active(db, datetime.utcnow())
 
 
-@router.get("/{promotion_id}", response_model=PromotionResponse)
+@router.get("/{promotion_id}", response_model=PromotionRead)
 async def get_promotion(
     promotion_id: int,
     db: AsyncSession = Depends(get_async_session)
@@ -99,7 +76,7 @@ async def get_promotion(
     return db_promotion
 
 
-@router.put("/{promotion_id}", response_model=PromotionResponse, responses={
+@router.put("/{promotion_id}", response_model=PromotionRead, responses={
     401: {
         "description": "Не авторизован",
         "content": {
@@ -155,7 +132,7 @@ async def update_promotion(
         promotion_data: Данные для обновления
         
     Returns:
-        PromotionResponse: Обновленная акция
+        PromotionRead: Обновленная акция
         
     Raises:
         401: Unauthorized - Не авторизован
@@ -172,70 +149,16 @@ async def update_promotion(
     return await promotion_crud.update(db, db_promotion, promotion_data.dict(exclude_unset=True))
 
 
-@router.delete("/{promotion_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Акция не найдена",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Promotion not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Акция успешно удалена",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Promotion deleted"
-                }
-            }
-        }
-    }
-})
+@router.delete("/{promotion_id}", response_model=Message)
 async def delete_promotion(
     promotion_id: int,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    _: dict = Depends(get_current_admin_user)
 ):
-    """
-    Удалить акцию
+    """Delete a promotion"""
+    promotion = await promotion_crud.get(db, promotion_id)
+    if not promotion:
+        raise HTTPException(status_code=404, detail="Promotion not found")
     
-    Args:
-        promotion_id: ID акции
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Акция не найдена
-    """
-    if not await promotion_crud.delete(db, promotion_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Promotion not found"
-        )
-    return {"message": "Promotion deleted"} 
+    await promotion_crud.delete(db, promotion_id)
+    return Message(message="Promotion deleted") 

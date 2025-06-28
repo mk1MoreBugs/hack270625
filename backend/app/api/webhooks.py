@@ -1,47 +1,22 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
+from uuid import UUID
 from app.database import get_async_session
 from app.models import WebhookInbox, User
-from app.schemas import WebhookResponse, WebhookCreate
+from app.schemas import WebhookRead, WebhookCreate, Message
 from app.crud import CRUDWebhook
-from app.security import get_current_active_user, get_current_business
+from app.security import get_current_active_user, get_current_business, get_current_admin_user
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 webhook_crud = CRUDWebhook(WebhookInbox)
 
 
-@router.post("", response_model=WebhookResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Некорректные данные",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Validation error"
-                }
-            }
-        }
-    }
+@router.post("", response_model=WebhookRead, responses={
+    201: {"description": "Вебхук создан"},
+    400: {"description": "Некорректные данные"},
+    401: {"description": "Не авторизован"},
+    403: {"description": "Нет прав доступа"}
 })
 async def create_webhook(
     webhook_data: WebhookCreate,
@@ -55,7 +30,7 @@ async def create_webhook(
         webhook_data: Данные для создания вебхука
         
     Returns:
-        WebhookResponse: Созданный вебхук
+        WebhookRead: Созданный вебхук
         
     Raises:
         401: Unauthorized - Не авторизован
@@ -65,7 +40,7 @@ async def create_webhook(
     return await webhook_crud.create(db, webhook_data.dict())
 
 
-@router.get("", response_model=List[WebhookResponse])
+@router.get("", response_model=List[WebhookRead])
 async def get_webhooks(
     source: Optional[str] = None,
     skip: int = 0,
@@ -78,7 +53,7 @@ async def get_webhooks(
     return await webhook_crud.get_multi(db, skip=skip, limit=limit)
 
 
-@router.get("/{webhook_id}", response_model=WebhookResponse)
+@router.get("/{webhook_id}", response_model=WebhookRead)
 async def get_webhook(
     webhook_id: int,
     db: AsyncSession = Depends(get_async_session)
@@ -93,70 +68,16 @@ async def get_webhook(
     return db_webhook
 
 
-@router.delete("/{webhook_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Вебхук не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Webhook not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Вебхук успешно удален",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Webhook deleted"
-                }
-            }
-        }
-    }
-})
+@router.delete("/{webhook_id}", response_model=Message)
 async def delete_webhook(
     webhook_id: int,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    _: dict = Depends(get_current_admin_user)
 ):
-    """
-    Удалить вебхук
+    """Delete a webhook"""
+    webhook = await webhook_crud.get(db, webhook_id)
+    if not webhook:
+        raise HTTPException(status_code=404, detail="Webhook not found")
     
-    Args:
-        webhook_id: ID вебхука
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Вебхук не найден
-    """
-    if not await webhook_crud.delete(db, webhook_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Webhook not found"
-        )
-    return {"message": "Webhook deleted"} 
+    await webhook_crud.delete(db, webhook_id)
+    return Message(message="Webhook deleted") 

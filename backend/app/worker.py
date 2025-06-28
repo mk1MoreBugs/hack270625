@@ -31,7 +31,22 @@ celery_app.conf.update(
 
 async def get_async_session() -> AsyncSession:
     """Получает асинхронную сессию для работы с базой данных"""
-    async with AsyncSessionLocal() as session:
+
+
+    celery_engine = create_async_engine(
+        str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://"),
+        pool_size=5,
+        max_overflow=10б
+        echo=True,
+        )
+
+    CelerySessionLocal = sessionmaker(
+        bind=celery_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        )
+
+    async with CelerySessionLocal() as session:
         return session
 
 
