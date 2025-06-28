@@ -9,6 +9,7 @@ from app.crud import (
     developer, project, building, apartment, user,
     promotion, booking, views_log, apartment_stats
 )
+from app.security import get_password_hash
 
 
 async def create_mock_data(session: AsyncSession):
@@ -18,21 +19,21 @@ async def create_mock_data(session: AsyncSession):
     users_data = [
         {
             "email": "buyer@example.com",
-            "hashed_password": "hashed_password",
+            "password": "password123",
             "role": UserRole.BUYER,
             "display_name": "Иван Покупателев",
             "phone": "+7 (999) 123-45-67"
         },
         {
             "email": "developer@pik.ru",
-            "hashed_password": "hashed_password",
+            "password": "password123",
             "role": UserRole.DEVELOPER,
             "display_name": "ПИК Менеджер",
             "phone": "+7 (495) 123-45-67"
         },
         {
             "email": "admin@association.ru",
-            "hashed_password": "hashed_password",
+            "password": "password123",
             "role": UserRole.ADMIN,
             "display_name": "Администратор Системы",
             "phone": "+7 (495) 765-43-21"
@@ -174,14 +175,14 @@ async def create_mock_data(session: AsyncSession):
             "discount_percent": 5.0,
             "starts_at": datetime.utcnow(),
             "ends_at": datetime.utcnow() + timedelta(days=30),
-            "conditions": '{"payment_type": "full"}'
+            "conditions": {"payment_type": "full"}
         },
         {
             "name": "Паркинг в подарок",
             "discount_percent": 100.0,
             "starts_at": datetime.utcnow(),
             "ends_at": datetime.utcnow() + timedelta(days=60),
-            "conditions": '{"min_rooms": 3}'
+            "conditions": {"min_rooms": 3}
         }
     ]
     

@@ -1,8 +1,38 @@
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List
-from datetime import datetime, date
+from typing import Optional, List, Dict, Any
+from datetime import datetime
 from enum import Enum
+from pydantic import validator, constr
 import json
+from sqlalchemy import String, TypeDecorator, JSON
+
+
+class EmailType(TypeDecorator):
+    """Custom type for email addresses"""
+    impl = String
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        return value
+
+    def process_result_value(self, value, dialect):
+        return value
+
+
+class JsonType(TypeDecorator):
+    """Custom type for JSON fields"""
+    impl = JSON
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is not None:
+            return json.dumps(value)
+        return None
+
+    def process_result_value(self, value, dialect):
+        if value is not None:
+            return json.loads(value)
+        return None
 
 
 class UserRole(str, Enum):
@@ -42,94 +72,100 @@ class PriceChangeReason(str, Enum):
     PROMO = "promo"
 
 
-class User(SQLModel, table=True):
+class TimestampedModel(SQLModel):
+    """Базовый класс для моделей с временными метками"""
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: Optional[datetime] = Field(default_factory=datetime.utcnow)
+
+
+class User(TimestampedModel, table=True):
     __tablename__ = "users"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(unique=True, index=True)
+    email: str = Field(sa_type=EmailType, unique=True)
     hashed_password: str
-    display_name: str
+    display_name: constr(min_length=2, max_length=100)
     role: UserRole
-    phone: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    phone: Optional[str] = Field(default=None, max_length=20)
     
     # Relationships
     views_logs: List["ViewsLog"] = Relationship(back_populates="user")
     bookings: List["Booking"] = Relationship(back_populates="user")
 
 
-class Developer(SQLModel, table=True):
+class Developer(TimestampedModel, table=True):
     __tablename__ = "developers"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    inn: str = Field(unique=True, index=True)
+    name: constr(min_length=2, max_length=100)
+    inn: str = Field(unique=True, min_length=10, max_length=12)
     description: Optional[str] = None
     logo_url: Optional[str] = None
     website: Optional[str] = None
     verified: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     projects: List["Project"] = Relationship(back_populates="developer")
 
 
-class Project(SQLModel, table=True):
+class Project(TimestampedModel, table=True):
     __tablename__ = "projects"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     developer_id: int = Field(foreign_key="developers.id")
-    name: str
+    name: constr(min_length=2, max_length=100)
     city: str
-    region_code: str
+    region_code: str = Field(max_length=2)
     address: str
     description: Optional[str] = None
     class_type: PropertyClass
     completion_date: Optional[datetime] = None
-    total_apartments: Optional[int] = None
-    available_apartments: Optional[int] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    total_apartments: Optional[int] = Field(default=None, ge=0)
+    available_apartments: Optional[int] = Field(default=None, ge=0)
     
     # Relationships
     developer: Developer = Relationship(back_populates="projects")
     buildings: List["Building"] = Relationship(back_populates="project")
 
+    @validator("available_apartments")
+    def validate_available_apartments(cls, v, values):
+        if v is not None and values.get("total_apartments") is not None:
+            if v > values["total_apartments"]:
+                raise ValueError("Available apartments cannot exceed total apartments")
+        return v
 
-class Building(SQLModel, table=True):
+
+class Building(TimestampedModel, table=True):
     __tablename__ = "buildings"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     project_id: int = Field(foreign_key="projects.id")
-    name: str
-    floors: int
+    name: constr(min_length=1, max_length=50)
+    floors: int = Field(gt=0)
     completion_date: Optional[datetime] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     project: Project = Relationship(back_populates="buildings")
     apartments: List["Apartment"] = Relationship(back_populates="building")
 
 
-class Apartment(SQLModel, table=True):
+class Apartment(TimestampedModel, table=True):
     __tablename__ = "apartments"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     building_id: int = Field(foreign_key="buildings.id")
-    number: str
-    floor: int
-    rooms: int
-    area_total: float
-    area_living: Optional[float] = None
-    area_kitchen: Optional[float] = None
-    base_price: float
-    current_price: float
+    number: str = Field(max_length=20)
+    floor: int = Field(gt=0)
+    rooms: int = Field(gt=0, le=10)
+    area_total: float = Field(gt=0)
+    area_living: Optional[float] = Field(default=None, gt=0)
+    area_kitchen: Optional[float] = Field(default=None, gt=0)
+    base_price: float = Field(gt=0)
+    current_price: float = Field(gt=0)
     status: ApartmentStatus = Field(default=ApartmentStatus.AVAILABLE)
     balcony: bool = Field(default=False)
     loggia: bool = Field(default=False)
     parking: bool = Field(default=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     building: Building = Relationship(back_populates="apartments")
@@ -138,15 +174,29 @@ class Apartment(SQLModel, table=True):
     bookings: List["Booking"] = Relationship(back_populates="apartment")
     stats: Optional["ApartmentStats"] = Relationship(back_populates="apartment")
 
+    @validator("area_living")
+    def validate_living_area(cls, v, values):
+        if v is not None and values.get("area_total") is not None:
+            if v >= values["area_total"]:
+                raise ValueError("Living area must be less than total area")
+        return v
 
-class PriceHistory(SQLModel, table=True):
+    @validator("floor")
+    def validate_floor(cls, v, values):
+        if "building_id" in values:
+            # TODO: Add validation against building.floors
+            pass
+        return v
+
+
+class PriceHistory(TimestampedModel, table=True):
     __tablename__ = "price_history"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     apartment_id: int = Field(foreign_key="apartments.id")
     changed_at: datetime = Field(default_factory=datetime.utcnow)
-    old_price: float
-    new_price: float
+    old_price: float = Field(gt=0)
+    new_price: float = Field(gt=0)
     reason: PriceChangeReason
     description: Optional[str] = None
     
@@ -154,7 +204,7 @@ class PriceHistory(SQLModel, table=True):
     apartment: Apartment = Relationship(back_populates="price_history")
 
 
-class ViewsLog(SQLModel, table=True):
+class ViewsLog(TimestampedModel, table=True):
     __tablename__ = "views_log"
     
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -172,17 +222,17 @@ class ApartmentStats(SQLModel, table=True):
     __tablename__ = "apartment_stats"
     
     apartment_id: int = Field(primary_key=True, foreign_key="apartments.id")
-    views_24h: int = Field(default=0)
-    leads_24h: int = Field(default=0)
-    bookings_24h: int = Field(default=0)
-    days_on_site: int = Field(default=0)
+    views_24h: int = Field(default=0, ge=0)
+    leads_24h: int = Field(default=0, ge=0)
+    bookings_24h: int = Field(default=0, ge=0)
+    days_on_site: int = Field(default=0, ge=0)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     apartment: Apartment = Relationship(back_populates="stats")
 
 
-class Booking(SQLModel, table=True):
+class Booking(TimestampedModel, table=True):
     __tablename__ = "bookings"
     
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -196,34 +246,38 @@ class Booking(SQLModel, table=True):
     user: User = Relationship(back_populates="bookings")
 
 
-class Promotion(SQLModel, table=True):
+class Promotion(TimestampedModel, table=True):
     __tablename__ = "promotions"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    discount_percent: float
+    name: constr(min_length=2, max_length=100)
+    discount_percent: float = Field(gt=0, le=100)
     starts_at: datetime
     ends_at: datetime
-    conditions: Optional[str] = None  # JSONB as string
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    conditions: Optional[Dict[str, Any]] = Field(default=None, sa_type=JsonType)
+
+    @validator("ends_at")
+    def validate_dates(cls, v, values):
+        if "starts_at" in values and v <= values["starts_at"]:
+            raise ValueError("End date must be after start date")
+        return v
 
 
-class WebhookInbox(SQLModel, table=True):
+class WebhookInbox(TimestampedModel, table=True):
     __tablename__ = "webhook_inbox"
     
     id: Optional[int] = Field(default=None, primary_key=True)
     source: str
-    payload: str  # JSONB as string
+    payload: Dict[str, Any] = Field(sa_type=JsonType)
     received_at: datetime = Field(default_factory=datetime.utcnow)
     processed: bool = Field(default=False)
 
 
-class DynamicPricingConfig(SQLModel, table=True):
+class DynamicPricingConfig(TimestampedModel, table=True):
     __tablename__ = "dynamic_pricing_config"
     
     id: Optional[int] = Field(default=None, primary_key=True)
-    k1: float = Field(default=0.5)  # views coefficient
-    k2: float = Field(default=2.0)  # leads coefficient
-    k3: float = Field(default=5.0)  # bookings coefficient
-    enabled: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow) 
+    k1: float = Field(default=0.5, gt=0)  # views coefficient
+    k2: float = Field(default=2.0, gt=0)  # leads coefficient
+    k3: float = Field(default=5.0, gt=0)  # bookings coefficient
+    enabled: bool = Field(default=True) 
