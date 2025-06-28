@@ -152,13 +152,3 @@ async def get_redoc_html(credentials: HTTPBasicCredentials = Depends(verify_docs
 async def get_openapi_json(credentials: HTTPBasicCredentials = Depends(verify_docs_access)):
     """Защищенный эндпоинт для OpenAPI JSON"""
     return app.openapi()
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(
-        "app.main:app",
-        host="0.0.0.0",
-        port=8000,
-        reload=True
-    ) 

@@ -23,7 +23,7 @@ class CRUDBase(Generic[ModelType]):
     
     async def get(self, db: AsyncSession, id: int) -> Optional[ModelType]:
         """Получить объект по ID"""
-        result = await db.exec(select(self.model).where(self.model.id == id))
+        result = await db.execute(select(self.model).where(self.model.id == id))
         return result.first()
     
     async def get_multi(
@@ -33,7 +33,7 @@ class CRUDBase(Generic[ModelType]):
         limit: int = 100
     ) -> List[ModelType]:
         """Получить список объектов с пагинацией"""
-        result = await db.exec(select(self.model).offset(skip).limit(limit))
+        result = await db.execute(select(self.model).offset(skip).limit(limit))
         return result.all()
     
     async def create(self, db: AsyncSession, obj_in: dict) -> ModelType:
@@ -75,12 +75,12 @@ class CRUDUser(CRUDBase[User]):
     
     async def get_by_email(self, db: AsyncSession, email: str) -> Optional[User]:
         """Получить пользователя по email"""
-        result = await db.exec(select(User).where(User.email == email))
+        result = await db.execute(select(User).where(User.email == email))
         return result.first()
     
     async def get_by_role(self, db: AsyncSession, role: UserRole) -> List[User]:
         """Получить пользователей по роли"""
-        result = await db.exec(select(User).where(User.role == role))
+        result = await db.execute(select(User).where(User.role == role))
         return result.all()
 
 
@@ -89,12 +89,12 @@ class CRUDDeveloper(CRUDBase[Developer]):
     
     async def get_by_inn(self, db: AsyncSession, inn: str) -> Optional[Developer]:
         """Получить застройщика по ИНН"""
-        result = await db.exec(select(Developer).where(Developer.inn == inn))
+        result = await db.execute(select(Developer).where(Developer.inn == inn))
         return result.first()
     
     async def get_verified(self, db: AsyncSession) -> List[Developer]:
         """Получить верифицированных застройщиков"""
-        result = await db.exec(select(Developer).where(Developer.verified == True))
+        result = await db.execute(select(Developer).where(Developer.verified == True))
         return result.all()
 
 
@@ -103,17 +103,17 @@ class CRUDProject(CRUDBase[Project]):
     
     async def get_by_city(self, db: AsyncSession, city: str) -> List[Project]:
         """Получить проекты по городу"""
-        result = await db.exec(select(Project).where(Project.city == city))
+        result = await db.execute(select(Project).where(Project.city == city))
         return result.all()
     
     async def get_by_developer(self, db: AsyncSession, developer_id: int) -> List[Project]:
         """Получить проекты застройщика"""
-        result = await db.exec(select(Project).where(Project.developer_id == developer_id))
+        result = await db.execute(select(Project).where(Project.developer_id == developer_id))
         return result.all()
     
     async def get_by_class(self, db: AsyncSession, class_type: PropertyClass) -> List[Project]:
         """Получить проекты по классу недвижимости"""
-        result = await db.exec(select(Project).where(Project.class_type == class_type))
+        result = await db.execute(select(Project).where(Project.class_type == class_type))
         return result.all()
 
 
@@ -122,7 +122,7 @@ class CRUDBuilding(CRUDBase[Building]):
     
     async def get_by_project(self, db: AsyncSession, project_id: int) -> List[Building]:
         """Получить корпуса проекта"""
-        result = await db.exec(select(Building).where(Building.project_id == project_id))
+        result = await db.execute(select(Building).where(Building.project_id == project_id))
         return result.all()
 
 
@@ -131,17 +131,17 @@ class CRUDApartment(CRUDBase[Apartment]):
     
     async def get_by_building(self, db: AsyncSession, building_id: int) -> List[Apartment]:
         """Получить квартиры корпуса"""
-        result = await db.exec(select(Apartment).where(Apartment.building_id == building_id))
+        result = await db.execute(select(Apartment).where(Apartment.building_id == building_id))
         return result.all()
     
     async def get_by_status(self, db: AsyncSession, status: ApartmentStatus) -> List[Apartment]:
         """Получить квартиры по статусу"""
-        result = await db.exec(select(Apartment).where(Apartment.status == status))
+        result = await db.execute(select(Apartment).where(Apartment.status == status))
         return result.all()
     
     async def get_by_rooms(self, db: AsyncSession, rooms: int) -> List[Apartment]:
         """Получить квартиры по количеству комнат"""
-        result = await db.exec(select(Apartment).where(Apartment.rooms == rooms))
+        result = await db.execute(select(Apartment).where(Apartment.rooms == rooms))
         return result.all()
     
     async def get_by_price_range(
@@ -151,7 +151,7 @@ class CRUDApartment(CRUDBase[Apartment]):
         max_price: float
     ) -> List[Apartment]:
         """Получить квартиры в диапазоне цен"""
-        result = await db.exec(
+        result = await db.execute(
             select(Apartment).where(
                 Apartment.current_price >= min_price,
                 Apartment.current_price <= max_price
@@ -185,7 +185,7 @@ class CRUDApartmentStats(CRUDBase[ApartmentStats]):
     
     async def get_by_apartment(self, db: AsyncSession, apartment_id: int) -> Optional[ApartmentStats]:
         """Получить статистику квартиры"""
-        result = await db.exec(select(ApartmentStats).where(ApartmentStats.apartment_id == apartment_id))
+        result = await db.execute(select(ApartmentStats).where(ApartmentStats.apartment_id == apartment_id))
         return result.first()
     
     async def update_stats(
@@ -225,7 +225,7 @@ class CRUDPriceHistory(CRUDBase[PriceHistory]):
         limit: int = 10
     ) -> List[PriceHistory]:
         """Получить историю цен квартиры"""
-        result = await db.exec(
+        result = await db.execute(
             select(PriceHistory)
             .where(PriceHistory.apartment_id == apartment_id)
             .order_by(PriceHistory.changed_at.desc())
@@ -240,7 +240,7 @@ class CRUDPriceHistory(CRUDBase[PriceHistory]):
     ) -> List[PriceHistory]:
         """Получить недавние изменения цен"""
         since = datetime.utcnow() - timedelta(hours=hours)
-        result = await db.exec(
+        result = await db.execute(
             select(PriceHistory)
             .where(PriceHistory.changed_at >= since)
             .order_by(PriceHistory.changed_at.desc())
@@ -259,7 +259,7 @@ class CRUDViewsLog(CRUDBase[ViewsLog]):
     ) -> List[ViewsLog]:
         """Получить логи просмотров квартиры за период"""
         since = datetime.utcnow() - timedelta(hours=hours)
-        result = await db.exec(
+        result = await db.execute(
             select(ViewsLog)
             .where(
                 ViewsLog.apartment_id == apartment_id,
@@ -277,7 +277,7 @@ class CRUDViewsLog(CRUDBase[ViewsLog]):
     ) -> int:
         """Получить количество просмотров квартиры за период"""
         since = datetime.utcnow() - timedelta(hours=hours)
-        result = await db.exec(
+        result = await db.execute(
             select(ViewsLog)
             .where(
                 ViewsLog.apartment_id == apartment_id,
@@ -297,7 +297,7 @@ class CRUDBooking(CRUDBase[Booking]):
         apartment_id: int
     ) -> List[Booking]:
         """Получить бронирования квартиры"""
-        result = await db.exec(select(Booking).where(Booking.apartment_id == apartment_id))
+        result = await db.execute(select(Booking).where(Booking.apartment_id == apartment_id))
         return result.all()
     
     async def get_by_user(
@@ -306,7 +306,7 @@ class CRUDBooking(CRUDBase[Booking]):
         user_id: int
     ) -> List[Booking]:
         """Получить бронирования пользователя"""
-        result = await db.exec(select(Booking).where(Booking.user_id == user_id))
+        result = await db.execute(select(Booking).where(Booking.user_id == user_id))
         return result.all()
     
     async def get_by_status(
@@ -315,7 +315,7 @@ class CRUDBooking(CRUDBase[Booking]):
         status: BookingStatus
     ) -> List[Booking]:
         """Получить бронирования по статусу"""
-        result = await db.exec(select(Booking).where(Booking.status == status))
+        result = await db.execute(select(Booking).where(Booking.status == status))
         return result.all()
     
     async def get_recent_bookings(
@@ -326,7 +326,7 @@ class CRUDBooking(CRUDBase[Booking]):
     ) -> List[Booking]:
         """Получить недавние бронирования квартиры"""
         since = datetime.utcnow() - timedelta(hours=hours)
-        result = await db.exec(
+        result = await db.execute(
             select(Booking)
             .where(
                 Booking.apartment_id == apartment_id,
@@ -341,7 +341,7 @@ class CRUDDynamicPricingConfig(CRUDBase[DynamicPricingConfig]):
     
     async def get_active(self, db: AsyncSession) -> Optional[DynamicPricingConfig]:
         """Получить активную конфигурацию"""
-        result = await db.exec(
+        result = await db.execute(
             select(DynamicPricingConfig).where(DynamicPricingConfig.enabled == True)
         )
         return result.first()

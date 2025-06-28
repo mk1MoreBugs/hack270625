@@ -310,8 +310,8 @@ class ApartmentSearchParams(BaseModel):
     max_area: Optional[float] = None
     property_class: Optional[PropertyClass] = None
     status: Optional[ApartmentStatus] = None
-    limit: int = 20
-    offset: int = 0
+    limit: Optional[int] = 20
+    offset: Optional[int] = 0
 
 
 # Dynamic Pricing Result schema

@@ -25,8 +25,8 @@ async def get_apartments(
     min_area: Optional[float] = Query(None, description="Минимальная площадь"),
     max_area: Optional[float] = Query(None, description="Максимальная площадь"),
     status: Optional[str] = Query(None, description="Статус квартиры"),
-    limit: int = Query(20, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
+    limit: Optional[int] = Query(20, description="Количество записей"),
+    offset: Optional[int] = Query(0, description="Смещение"),
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить список квартир с фильтрацией"""
@@ -55,7 +55,27 @@ async def get_apartments(
         if status and apt.status != status:
             continue
         
-        filtered_apartments.append(apt)
+        # Преобразуем модель в схему Pydantic
+        filtered_apartments.append(
+            ApartmentResponse(
+                id=apt.id,
+                number=apt.number,
+                floor=apt.floor,
+                rooms=apt.rooms,
+                area_total=apt.area_total,
+                area_living=apt.area_living,
+                area_kitchen=apt.area_kitchen,
+                base_price=apt.base_price,
+                current_price=apt.current_price,
+                balcony=apt.balcony,
+                loggia=apt.loggia,
+                parking=apt.parking,
+                building_id=apt.building_id,
+                status=apt.status,
+                created_at=apt.created_at,
+                updated_at=apt.updated_at
+            )
+        )
     
     return filtered_apartments
 
