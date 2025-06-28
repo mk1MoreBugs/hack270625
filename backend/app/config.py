@@ -2,6 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 import os
 import secrets
+from functools import cached_property
 
 
 class Settings(BaseSettings):
@@ -10,6 +11,29 @@ class Settings(BaseSettings):
         env_ignore_empty=True,
         extra="ignore",
     )
+
+    # Project info
+    project_name: str = "Real Estate 4.0"
+    version: str = "1.0.0"
+    api_v1_str: str = "/api/v1"
+    
+    # Security
+    secret_key: str = secrets.token_urlsafe(32)
+    docs_username: str = "admin"  # Change in production!
+    docs_password: str = "admin"  # Change in production!
+    
+    # Database
+    postgres_host: str = "postgres"
+    postgres_port: int = 5432
+    postgres_user: str = "postgres"
+    postgres_password: str = "postgres"
+    postgres_db: str = "real_estate"
+    
+    # Debug mode
+    debug: bool = True
+    
+    # CORS
+    allowed_origins: list = ["*"]  # Change in production!
 
     # Database Configuration
     postgres_host: str = "postgres"
@@ -22,9 +46,6 @@ class Settings(BaseSettings):
     redis_host: str = "redis"
     redis_port: int = 6379
     redis_db: int = 0
-    
-    # Security
-    secret_key: str = secrets.token_urlsafe(32)
     
     # JWT settings
     jwt_algorithm: str = "HS256"
@@ -43,21 +64,14 @@ class Settings(BaseSettings):
     celery_broker_url: str = "redis://redis:6379/0"
     celery_result_backend: str = "redis://redis:6379/0"
     
-    # API
-    api_v1_str: str = "/api/v1"
-    project_name: str = "Недвижимость 4.0"
-    version: str = "1.0.0"
-    
     # Documentation access
     docs_username: str = "admin"
-    docs_password: str = "change_this"
+    docs_password: str = "admin"
     
-    @property
+    @cached_property
     def database_url(self) -> str:
-        """Формирует URL для подключения к базе данных"""
-        url = f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-        print(url)
-        return url
+        """Get database URL"""
+        return f"postgresql://{self.postgres_user}:{self.postgres_password}@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
     
     @property
     def redis_url(self) -> str:
