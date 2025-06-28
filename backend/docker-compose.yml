@@ -5,8 +5,8 @@ services:
   postgres:
     image: postgres:17.5-alpine
     environment:
-      POSTGRES_DB: real_estate_db
-      POSTGRES_USER: real_estate_user
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data
     volumes:
@@ -40,8 +40,8 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: real_estate_db
-      POSTGRES_USER: real_estate_user
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -63,8 +63,8 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: real_estate_db
-      POSTGRES_USER: real_estate_user
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -83,8 +83,8 @@ services:
     environment:
       POSTGRES_HOST: postgres
       POSTGRES_PORT: 5432
-      POSTGRES_DB: real_estate_db
-      POSTGRES_USER: real_estate_user
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       REDIS_HOST: redis
       REDIS_PORT: 6379
