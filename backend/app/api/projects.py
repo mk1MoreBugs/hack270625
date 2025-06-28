@@ -117,6 +117,25 @@ async def get_project_buildings(
     return buildings_list[start:end]
 
 
+@router.post("/{project_id}/buildings", response_model=BuildingResponse)
+async def create_project_building(
+    project_id: int,
+    building_data: BuildingCreate,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Создать новый корпус в проекте"""
+    # Проверяем, что проект существует
+    project_obj = await project.get(db, project_id)
+    if not project_obj:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    
+    # Создаем корпус
+    building_dict = building_data.dict()
+    building_dict["project_id"] = project_id
+    building_obj = await building.create(db, building_dict)
+    return building_obj
+
+
 @router.get("/{project_id}/apartments", response_model=List[ApartmentResponse])
 async def get_project_apartments(
     project_id: int,
