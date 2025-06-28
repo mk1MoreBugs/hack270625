@@ -5,9 +5,9 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.config import settings
 from app.database import create_db_and_tables
 from app.api import (
-    apartments, developers, projects, dynamic_pricing,
-    users, bookings, promotions, analytics, map,
-    ai_matching, webhooks, auth
+    properties, developers, projects, buildings, 
+    addresses, prices, media, dynamic_pricing, users, bookings, 
+    promotions, analytics, map, ai_matching, webhooks, auth
 )
 import secrets
 
@@ -71,18 +71,22 @@ app.add_middleware(
 )
 
 # Подключаем все роутеры
-app.include_router(auth.router)
-app.include_router(users.router)
-app.include_router(developers.router)
-app.include_router(projects.router)
-app.include_router(apartments.router)
-app.include_router(bookings.router)
-app.include_router(promotions.router)
-app.include_router(analytics.router)
-app.include_router(webhooks.router)
-app.include_router(ai_matching.router)
-app.include_router(dynamic_pricing.router)
-app.include_router(map.router)
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(developers.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(buildings.router, prefix="/api/v1")
+app.include_router(properties.router, prefix="/api/v1")
+app.include_router(addresses.router, prefix="/api/v1")
+app.include_router(prices.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
+app.include_router(bookings.router, prefix="/api/v1")
+app.include_router(promotions.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(dynamic_pricing.router, prefix="/api/v1")
+app.include_router(ai_matching.router, prefix="/api/v1")
+app.include_router(map.router, prefix="/api/v1")
+app.include_router(webhooks.router, prefix="/api/v1")
 
 
 @app.get("/")

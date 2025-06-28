@@ -1,272 +1,160 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
+from uuid import UUID
+
 from app.database import get_async_session
-from app.models import Developer, Project, User
-from app.schemas import (
-    DeveloperResponse, DeveloperCreate, DeveloperUpdate,
-    ProjectResponse
-)
-from app.crud import CRUDDeveloper, CRUDProject
-from app.security import get_current_active_user, get_current_business
+from app.crud import crud_developer
+from app.schemas import DeveloperCreate, DeveloperUpdate, DeveloperResponse
+from app.security import get_current_user
+from app.models import User
 
 router = APIRouter(prefix="/developers", tags=["developers"])
 
-developer_crud = CRUDDeveloper(Developer)
-project_crud = CRUDProject(Project)
 
-
-@router.post("", response_model=DeveloperResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Застройщик с таким ИНН уже существует",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Developer with this INN already exists"
-                }
-            }
-        }
-    }
-})
-async def create_developer(
-    developer_data: DeveloperCreate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
-):
-    """
-    Создать нового застройщика
-    
-    Args:
-        developer_data: Данные для создания застройщика
-        
-    Returns:
-        DeveloperResponse: Созданный застройщик
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        400: Bad Request - Застройщик с таким ИНН уже существует
-    """
-    # Проверяем, не существует ли уже застройщик с таким ИНН
-    existing_developer = await developer_crud.get_by_inn(db, developer_data.inn)
-    if existing_developer:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Developer with this INN already exists"
-        )
-    
-    return await developer_crud.create(db, developer_data.dict())
-
-
-@router.get("", response_model=List[DeveloperResponse])
+@router.get("/", response_model=List[DeveloperResponse])
 async def get_developers(
-    verified_only: bool = False,
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
+    name: Optional[str] = None,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить список застройщиков"""
-    if verified_only:
-        return await developer_crud.get_verified(db)
-    return await developer_crud.get_multi(db, skip=skip, limit=limit)
+    """
+    Получить список застройщиков с фильтрацией
+    """
+    try:
+        developers = await crud_developer.get_multi(db, skip=skip, limit=limit)
+        
+        # Применяем фильтры
+        if name:
+            developers = [d for d in developers if name.lower() in d.name.lower()]
+        
+        return developers
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении застройщиков: {str(e)}"
+        )
 
 
 @router.get("/{developer_id}", response_model=DeveloperResponse)
 async def get_developer(
-    developer_id: int,
+    developer_id: UUID,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить застройщика по ID"""
-    db_developer = await developer_crud.get(db, developer_id)
-    if not db_developer:
+    """
+    Получить информацию о застройщике
+    """
+    try:
+        developer = await crud_developer.get(db, developer_id)
+        if not developer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Застройщик не найден"
+            )
+        return developer
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Developer not found"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при получении застройщика: {str(e)}"
         )
-    return db_developer
 
 
-@router.put("/{developer_id}", response_model=DeveloperResponse, responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Застройщик не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Developer not found"
-                }
-            }
-        }
-    },
-    400: {
-        "description": "Застройщик с таким ИНН уже существует",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Developer with this INN already exists"
-                }
-            }
-        }
-    }
-})
+@router.post("/", response_model=DeveloperResponse, status_code=status.HTTP_201_CREATED)
+async def create_developer(
+    developer_data: DeveloperCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
+):
+    """
+    Создать нового застройщика
+    """
+    try:
+        # Проверяем права доступа
+        if current_user.role not in ["admin", "developer"]:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для создания застройщика"
+            )
+        
+        developer = await crud_developer.create(db, developer_data.dict())
+        return developer
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при создании застройщика: {str(e)}"
+        )
+
+
+@router.put("/{developer_id}", response_model=DeveloperResponse)
 async def update_developer(
-    developer_id: int,
+    developer_id: UUID,
     developer_data: DeveloperUpdate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Обновить застройщика
-    
-    Args:
-        developer_id: ID застройщика
-        developer_data: Данные для обновления
-        
-    Returns:
-        DeveloperResponse: Обновленный застройщик
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Застройщик не найден
-        400: Bad Request - Застройщик с таким ИНН уже существует
     """
-    db_developer = await developer_crud.get(db, developer_id)
-    if not db_developer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Developer not found"
-        )
-    
-    # Если обновляется ИНН, проверяем что он уникальный
-    if developer_data.inn:
-        existing_developer = await developer_crud.get_by_inn(db, developer_data.inn)
-        if existing_developer and existing_developer.id != developer_id:
+    try:
+        # Проверяем права доступа
+        if current_user.role not in ["admin", "developer"]:
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Developer with this INN already exists"
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для обновления застройщика"
             )
-    
-    return await developer_crud.update(db, db_developer, developer_data.dict(exclude_unset=True))
+        
+        developer = await crud_developer.get(db, developer_id)
+        if not developer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Застройщик не найден"
+            )
+        
+        updated_developer = await crud_developer.update(db, developer, developer_data.dict(exclude_unset=True))
+        return updated_developer
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при обновлении застройщика: {str(e)}"
+        )
 
 
-@router.delete("/{developer_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Застройщик не найден",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Developer not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Застройщик успешно удален",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Developer deleted"
-                }
-            }
-        }
-    }
-})
+@router.delete("/{developer_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_developer(
-    developer_id: int,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_business)
+    developer_id: UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_async_session)
 ):
     """
     Удалить застройщика
-    
-    Args:
-        developer_id: ID застройщика
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Застройщик не найден
     """
-    if not await developer_crud.delete(db, developer_id):
+    try:
+        # Проверяем права доступа
+        if current_user.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Недостаточно прав для удаления застройщика"
+            )
+        
+        developer = await crud_developer.get(db, developer_id)
+        if not developer:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Застройщик не найден"
+            )
+        
+        await crud_developer.delete(db, developer_id)
+    except HTTPException:
+        raise
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Developer not found"
-        )
-    return {"message": "Developer deleted"}
-
-
-@router.get("/{developer_id}/projects", response_model=List[ProjectResponse])
-async def get_developer_projects(
-    developer_id: int,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить проекты застройщика"""
-    if not await developer_crud.get(db, developer_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Developer not found"
-        )
-    return await project_crud.get_by_developer(db, developer_id) 
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Ошибка при удалении застройщика: {str(e)}"
+        ) 
