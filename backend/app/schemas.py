@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List, Dict, Any
 from datetime import datetime, date
 from app.models import (
     UserRole, PropertyClass, ApartmentStatus, BookingStatus, 
@@ -10,7 +10,7 @@ from app.models import (
 # User schemas
 class UserBase(BaseModel):
     email: str
-    full_name: str
+    display_name: str
     phone: Optional[str] = None
     role: UserRole
 
@@ -20,8 +20,10 @@ class UserCreate(UserBase):
 
 
 class UserUpdate(BaseModel):
-    full_name: Optional[str] = None
+    email: Optional[str] = None
+    display_name: Optional[str] = None
     phone: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserResponse(UserBase):
@@ -29,14 +31,17 @@ class UserResponse(UserBase):
     created_at: datetime
     updated_at: datetime
 
+    class Config:
+        from_attributes = True
+
 
 # Developer schemas
 class DeveloperBase(BaseModel):
     name: str
     inn: str
     description: Optional[str] = None
-    logo_url: Optional[str] = None
     website: Optional[str] = None
+    logo_url: Optional[str] = None
 
 
 class DeveloperCreate(DeveloperBase):
@@ -46,15 +51,17 @@ class DeveloperCreate(DeveloperBase):
 class DeveloperUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    logo_url: Optional[str] = None
     website: Optional[str] = None
-    verified: Optional[bool] = None
+    logo_url: Optional[str] = None
 
 
 class DeveloperResponse(DeveloperBase):
     id: int
     verified: bool
     created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Project schemas
@@ -65,9 +72,7 @@ class ProjectBase(BaseModel):
     address: str
     description: Optional[str] = None
     class_type: PropertyClass
-    completion_date: Optional[datetime] = None
-    total_apartments: Optional[int] = None
-    available_apartments: Optional[int] = None
+    commissioning_date: Optional[datetime] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -76,24 +81,52 @@ class ProjectCreate(ProjectBase):
 
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
-    address: Optional[str] = None
     description: Optional[str] = None
-    completion_date: Optional[datetime] = None
-    total_apartments: Optional[int] = None
-    available_apartments: Optional[int] = None
+    commissioning_date: Optional[datetime] = None
 
 
 class ProjectResponse(ProjectBase):
     id: int
     developer_id: int
     created_at: datetime
+    total_apartments: Optional[int] = None
+    available_apartments: Optional[int] = None
+
+    class Config:
+        from_attributes = True
+
+
+class ProjectGeoResponse(BaseModel):
+    id: int
+    name: str
+    city: str
+    address: str
+    class_type: PropertyClass
+    lat: float
+    lon: float
+    min_price: Optional[float] = None
+    max_price: Optional[float] = None
+    available_count: int
+
+    class Config:
+        from_attributes = True
+
+
+class MapFiltersResponse(BaseModel):
+    cities: List[str]
+    regions: List[str]
+    property_classes: List[PropertyClass]
+    price_ranges: Dict[str, float]  # min_price, max_price
+    completion_years: List[int]
 
 
 # Building schemas
 class BuildingBase(BaseModel):
     name: str
     floors: int
-    completion_date: Optional[datetime] = None
+    sections: Optional[int] = None
+    commissioning_quarter: Optional[int] = None
+    commissioning_year: Optional[int] = None
 
 
 class BuildingCreate(BuildingBase):
@@ -103,13 +136,17 @@ class BuildingCreate(BuildingBase):
 class BuildingUpdate(BaseModel):
     name: Optional[str] = None
     floors: Optional[int] = None
-    completion_date: Optional[datetime] = None
+    commissioning_quarter: Optional[int] = None
+    commissioning_year: Optional[int] = None
 
 
 class BuildingResponse(BuildingBase):
     id: int
     project_id: int
     created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Apartment schemas
@@ -125,6 +162,7 @@ class ApartmentBase(BaseModel):
     balcony: bool = False
     loggia: bool = False
     parking: bool = False
+    layout_image_url: Optional[str] = None
 
 
 class ApartmentCreate(ApartmentBase):
@@ -134,9 +172,7 @@ class ApartmentCreate(ApartmentBase):
 class ApartmentUpdate(BaseModel):
     current_price: Optional[float] = None
     status: Optional[ApartmentStatus] = None
-    balcony: Optional[bool] = None
-    loggia: Optional[bool] = None
-    parking: Optional[bool] = None
+    layout_image_url: Optional[str] = None
 
 
 class ApartmentResponse(ApartmentBase):
@@ -145,6 +181,23 @@ class ApartmentResponse(ApartmentBase):
     status: ApartmentStatus
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ApartmentMatchRequest(BaseModel):
+    budget: float
+    preferred_cities: List[str]
+    preferred_districts: Optional[List[str]] = None
+    min_rooms: Optional[int] = None
+    max_rooms: Optional[int] = None
+    min_area: Optional[float] = None
+    max_area: Optional[float] = None
+    property_class: Optional[PropertyClass] = None
+    has_balcony: Optional[bool] = None
+    has_parking: Optional[bool] = None
+    max_floor: Optional[int] = None
 
 
 # Price History schemas
@@ -164,43 +217,54 @@ class PriceHistoryResponse(PriceHistoryBase):
     apartment_id: int
     changed_at: datetime
 
+    class Config:
+        from_attributes = True
+
 
 # Views Log schemas
 class ViewsLogBase(BaseModel):
     event: ViewEvent
+    user_id: Optional[int] = None
 
 
 class ViewsLogCreate(ViewsLogBase):
     apartment_id: int
-    user_id: Optional[int] = None
 
 
 class ViewsLogResponse(ViewsLogBase):
     id: int
     apartment_id: int
-    user_id: Optional[int]
     occurred_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Apartment Stats schemas
 class ApartmentStatsBase(BaseModel):
-    views_24h: int
-    leads_24h: int
-    bookings_24h: int
-    days_on_site: int
+    views_24h: int = 0
+    leads_24h: int = 0
+    bookings_24h: int = 0
+    days_on_site: int = 0
 
 
 class ApartmentStatsCreate(ApartmentStatsBase):
     apartment_id: int
 
 
-class ApartmentStatsUpdate(ApartmentStatsBase):
-    pass
-
-
 class ApartmentStatsResponse(ApartmentStatsBase):
     apartment_id: int
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class MarketAnalyticsResponse(BaseModel):
+    total_views: int
+    avg_views: float
+    avg_bookings: float
+    period_days: int = 30
 
 
 # Booking schemas
@@ -214,13 +278,17 @@ class BookingCreate(BookingBase):
 
 
 class BookingUpdate(BaseModel):
-    status: Optional[BookingStatus] = None
+    status: BookingStatus
 
 
 class BookingResponse(BookingBase):
     id: int
     status: BookingStatus
     booked_at: datetime
+    expires_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Promotion schemas
@@ -229,7 +297,7 @@ class PromotionBase(BaseModel):
     discount_percent: float
     starts_at: datetime
     ends_at: datetime
-    conditions: Optional[dict] = None
+    conditions: Optional[Dict[str, Any]] = None
 
 
 class PromotionCreate(PromotionBase):
@@ -241,12 +309,15 @@ class PromotionUpdate(BaseModel):
     discount_percent: Optional[float] = None
     starts_at: Optional[datetime] = None
     ends_at: Optional[datetime] = None
-    conditions: Optional[dict] = None
+    conditions: Optional[Dict[str, Any]] = None
 
 
 class PromotionResponse(PromotionBase):
     id: int
     created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Dynamic Pricing Config schemas
@@ -284,19 +355,22 @@ class TokenData(BaseModel):
 
 
 # Webhook schemas
-class WebhookInboxBase(BaseModel):
+class WebhookBase(BaseModel):
     source: str
-    payload: dict
+    payload: Dict[str, Any]
 
 
-class WebhookInboxCreate(WebhookInboxBase):
+class WebhookCreate(WebhookBase):
     pass
 
 
-class WebhookInboxResponse(WebhookInboxBase):
+class WebhookResponse(WebhookBase):
     id: int
     received_at: datetime
     processed: bool
+
+    class Config:
+        from_attributes = True
 
 
 # Search schemas
