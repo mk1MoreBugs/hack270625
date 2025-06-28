@@ -1,68 +1,88 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from typing import List, Optional, Dict
 from app.database import get_async_session
 from app.models import ApartmentStats, ViewsLog
 from app.schemas import ApartmentStatsResponse, MarketAnalyticsResponse, ViewsLogResponse
-from app.crud import apartment_stats, views_log
+from app.crud import CRUDStats, CRUDViewsLog
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
+stats_crud = CRUDStats(ApartmentStats)
+views_crud = CRUDViewsLog(ViewsLog)
+
 
 @router.get("/market", response_model=MarketAnalyticsResponse)
 async def get_market_analytics(
-    city: Optional[str] = Query(None, description="Город"),
-    region_code: Optional[str] = Query(None, description="Код региона"),
-    period_days: int = Query(30, description="Период анализа в днях"),
+    days: int = 30,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить аналитику рынка"""
-    start_date = datetime.utcnow() - timedelta(days=period_days)
+    """Получить аналитику по рынку"""
+    # Получаем статистику просмотров
+    total_views = await views_crud.get_total_views(db, days)
+    avg_views = await views_crud.get_avg_views(db, days)
+    avg_bookings = await views_crud.get_avg_bookings(db, days)
     
-    # Получаем статистику по просмотрам и бронированиям
-    stats = await apartment_stats.get_market_stats(
-        db,
-        start_date=start_date,
-        city=city,
-        region_code=region_code
+    return MarketAnalyticsResponse(
+        total_views=total_views,
+        avg_views=avg_views,
+        avg_bookings=avg_bookings,
+        period_days=days
     )
-    
-    return stats
 
 
-@router.get("/apartments/{apartment_id}/stats", response_model=ApartmentStatsResponse)
-async def get_apartment_stats(
+@router.get("/apartments/{apartment_id}", response_model=ApartmentStatsResponse)
+async def get_apartment_analytics(
     apartment_id: int,
-    period_days: int = Query(30, description="Период анализа в днях"),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить статистику по квартире"""
-    stats = await apartment_stats.get(db, apartment_id)
+    """Получить аналитику по квартире"""
+    stats = await stats_crud.get_apartment_stats(apartment_id)
     if not stats:
-        raise HTTPException(status_code=404, detail="Статистика не найдена")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Statistics not found"
+        )
     return stats
 
 
-@router.get("/apartments/{apartment_id}/views", response_model=List[ViewsLogResponse])
+@router.get("/views/{apartment_id}", response_model=List[ViewsLogResponse])
 async def get_apartment_views(
     apartment_id: int,
-    start_date: Optional[datetime] = Query(None, description="Начальная дата"),
-    end_date: Optional[datetime] = Query(None, description="Конечная дата"),
-    limit: int = Query(100, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
+    start_date: Optional[datetime] = None,
+    end_date: Optional[datetime] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить историю просмотров квартиры"""
-    views = await views_log.get_by_apartment(
+    views = await views_crud.get_by_apartment(
         db,
         apartment_id,
         start_date=start_date,
         end_date=end_date,
-        skip=offset,
+        skip=skip,
         limit=limit
     )
     return views
+
+
+@router.get("/district/{district_id}/stats", response_model=MarketAnalyticsResponse)
+async def get_district_stats(
+    district_id: int,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить статистику по району"""
+    stats = await stats_crud.get_district_stats(district_id)
+    
+    if not stats:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="District stats not found"
+        )
+    
+    return MarketAnalyticsResponse(**stats)
 
 
 @router.get("/demand-clusters", response_model=List[dict])

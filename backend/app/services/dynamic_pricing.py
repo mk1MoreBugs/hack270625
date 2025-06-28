@@ -1,6 +1,5 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import select, func
-from typing import List, Optional, Tuple
+from typing import List, Optional
 from datetime import datetime, timedelta
 import statistics
 from app.models import (
@@ -9,13 +8,17 @@ from app.models import (
 )
 from app.schemas import DynamicPricingResult
 from app.config import settings
-from app.crud import apartment, apartment_stats, price_history, booking, dynamic_pricing_config
+from app.crud import (
+    apartment, apartment_stats, booking, dynamic_pricing_config,
+    CRUDDynamicPricing
+)
 
 
 class DynamicPricingService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.config = None
+        self.crud = CRUDDynamicPricing(session)
     
     async def _get_config(self) -> DynamicPricingConfig:
         """Получает актуальную конфигурацию динамического ценообразования"""
@@ -55,17 +58,11 @@ class DynamicPricingService:
     async def get_cluster_median_demand(self, apartment: Apartment) -> float:
         """Получает медианный спрос для кластера (проект + тип комнат)"""
         # Получаем все квартиры того же проекта и типа комнат
-        result = await self.session.execute(
-            select(Apartment)
-            .join(Apartment.building)
-            .join(Apartment.building.project)
-            .where(
-                Apartment.building.project.id == apartment.building.project.id,
-                Apartment.rooms == apartment.rooms,
-                Apartment.id != apartment.id
-            )
+        cluster_apartments = await self.crud.get_cluster_apartments(
+            apartment.building.project.id,
+            apartment.rooms,
+            apartment.id
         )
-        cluster_apartments = result.all()
         
         if not cluster_apartments:
             return 1.0  # Если нет других квартир в кластере
@@ -85,7 +82,7 @@ class DynamicPricingService:
     async def should_update_price(self, apartment: Apartment) -> bool:
         """Проверяет, можно ли обновлять цену для квартиры"""
         # Проверяем ограничение "не чаще 1 раза в 24 ч"
-        recent_changes = await price_history.get_by_apartment(self.session, apartment.id, limit=1)
+        recent_changes = await self.crud.get_recent_price_changes(apartment.id)
         
         if recent_changes:
             last_price_change = recent_changes[0]
@@ -166,7 +163,7 @@ class DynamicPricingService:
         old_price = apartment.current_price
         
         # Обновляем цену квартиры
-        await apartment.update_price(self.session, apartment.id, new_price)
+        await self.crud.update_apartment_price(apartment.id, new_price)
         
         # Создаем запись в истории цен
         description = await self.generate_price_change_description(apartment, price_change_percent)
@@ -178,7 +175,7 @@ class DynamicPricingService:
             "description": description
         }
         
-        await price_history.create(self.session, price_history_data)
+        await self.crud.create_price_history(price_history_data)
         
         # Вычисляем demand_score для результата
         demand_score = await self.calculate_demand_score(apartment)

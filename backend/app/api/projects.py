@@ -1,76 +1,60 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database import get_async_session
-from app.models import Project, Building, Apartment
+from app.models import Project, Building, Apartment, PropertyClass
 from app.schemas import (
     ProjectResponse, ProjectCreate, ProjectUpdate,
     BuildingResponse, BuildingCreate, BuildingUpdate,
     ApartmentResponse
 )
-from app.crud import project, building, apartment
-from datetime import datetime
+from app.crud import CRUDProject, CRUDBuilding, CRUDApartment
 
 router = APIRouter(prefix="/projects", tags=["projects"])
 
-
-@router.get("/", response_model=List[ProjectResponse])
-async def get_projects(
-    city: Optional[str] = Query(None, description="Город"),
-    region_code: Optional[str] = Query(None, description="Код региона"),
-    property_class: Optional[str] = Query(None, description="Класс недвижимости"),
-    developer_id: Optional[int] = Query(None, description="ID застройщика"),
-    limit: int = Query(20, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Получить список проектов"""
-    projects_list = await project.get_multi(db, skip=offset, limit=limit)
-    
-    # Применяем фильтры
-    filtered_projects = []
-    for proj in projects_list:
-        # Фильтр по городу
-        if city and proj.city != city:
-            continue
-        
-        # Фильтр по региону
-        if region_code and proj.region_code != region_code:
-            continue
-        
-        # Фильтр по классу недвижимости
-        if property_class and proj.class_type != property_class:
-            continue
-        
-        # Фильтр по застройщику
-        if developer_id and proj.developer_id != developer_id:
-            continue
-        
-        filtered_projects.append(proj)
-    
-    return filtered_projects
+project_crud = CRUDProject(Project)
+building_crud = CRUDBuilding(Building)
+apartment_crud = CRUDApartment(Apartment)
 
 
-@router.get("/{project_id}", response_model=ProjectResponse)
-async def get_project(project_id: int, db: AsyncSession = Depends(get_async_session)):
-    """Получить информацию о проекте"""
-    project_obj = await project.get(db, project_id)
-    
-    if not project_obj:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    return project_obj
-
-
-@router.post("/", response_model=ProjectResponse)
+@router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Создать новый проект"""
-    project_dict = project_data.dict()
-    project_obj = await project.create(db, project_dict)
-    return project_obj
+    return await project_crud.create(db, project_data.dict())
+
+
+@router.get("", response_model=List[ProjectResponse])
+async def get_projects(
+    city: Optional[str] = None,
+    property_class: Optional[PropertyClass] = None,
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить список проектов"""
+    if city:
+        return await project_crud.get_by_city(db, city)
+    elif property_class:
+        return await project_crud.get_by_class(db, property_class)
+    return await project_crud.get_multi(db, skip=skip, limit=limit)
+
+
+@router.get("/{project_id}", response_model=ProjectResponse)
+async def get_project(
+    project_id: int,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить проект по ID"""
+    db_project = await project_crud.get(db, project_id)
+    if not db_project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    return db_project
 
 
 @router.put("/{project_id}", response_model=ProjectResponse)
@@ -79,102 +63,150 @@ async def update_project(
     project_data: ProjectUpdate,
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Обновить информацию о проекте"""
-    project_obj = await project.get(db, project_id)
-    
-    if not project_obj:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    update_data = project_data.dict(exclude_unset=True)
-    project_obj = await project.update(db, project_obj, update_data)
-    return project_obj
+    """Обновить проект"""
+    db_project = await project_crud.get(db, project_id)
+    if not db_project:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    return await project_crud.update(db, db_project, project_data.dict(exclude_unset=True))
 
 
 @router.delete("/{project_id}")
-async def delete_project(project_id: int, db: AsyncSession = Depends(get_async_session)):
-    """Удалить проект"""
-    success = await project.delete(db, project_id)
-    
-    if not success:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    return {"message": "Проект удален"}
-
-
-@router.get("/{project_id}/buildings", response_model=List[BuildingResponse])
-async def get_project_buildings(
+async def delete_project(
     project_id: int,
-    limit: int = Query(20, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить корпуса проекта"""
-    buildings_list = await building.get_by_project(db, project_id)
-    
-    # Применяем пагинацию
-    start = offset
-    end = start + limit
-    return buildings_list[start:end]
+    """Удалить проект"""
+    if not await project_crud.delete(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    return {"message": "Project deleted"}
 
 
 @router.post("/{project_id}/buildings", response_model=BuildingResponse)
-async def create_project_building(
+async def create_building(
     project_id: int,
     building_data: BuildingCreate,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Создать новый корпус в проекте"""
-    # Проверяем, что проект существует
-    project_obj = await project.get(db, project_id)
-    if not project_obj:
-        raise HTTPException(status_code=404, detail="Проект не найден")
+    # Проверяем существование проекта
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
-    # Создаем корпус
     building_dict = building_data.dict()
     building_dict["project_id"] = project_id
-    building_obj = await building.create(db, building_dict)
-    return building_obj
+    return await building_crud.create(db, building_dict)
 
 
-@router.get("/{project_id}/apartments", response_model=List[ApartmentResponse])
-async def get_project_apartments(
+@router.get("/{project_id}/buildings", response_model=List[BuildingResponse])
+async def get_project_buildings(
     project_id: int,
-    rooms: Optional[int] = Query(None, description="Количество комнат"),
-    min_price: Optional[float] = Query(None, description="Минимальная цена"),
-    max_price: Optional[float] = Query(None, description="Максимальная цена"),
-    status: Optional[str] = Query(None, description="Статус квартиры"),
-    limit: int = Query(20, description="Количество записей"),
-    offset: int = Query(0, description="Смещение"),
     db: AsyncSession = Depends(get_async_session)
 ):
-    """Получить квартиры проекта"""
-    # Получаем все квартиры
-    apartments_list = await apartment.get_multi(db, skip=0, limit=1000)  # Большой лимит для фильтрации
+    """Получить список корпусов проекта"""
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    return await building_crud.get_by_project(db, project_id)
+
+
+@router.get("/{project_id}/buildings/{building_id}", response_model=BuildingResponse)
+async def get_building(
+    project_id: int,
+    building_id: int,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить корпус по ID"""
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
-    # Фильтруем по проекту и другим параметрам
-    filtered_apartments = []
-    for apt in apartments_list:
-        # Проверяем, что квартира принадлежит проекту
-        if apt.building.project.id != project_id:
-            continue
-        
-        # Фильтр по комнатам
-        if rooms is not None and apt.rooms != rooms:
-            continue
-        
-        # Фильтр по цене
-        if min_price is not None and apt.current_price < min_price:
-            continue
-        if max_price is not None and apt.current_price > max_price:
-            continue
-        
-        # Фильтр по статусу
-        if status and apt.status != status:
-            continue
-        
-        filtered_apartments.append(apt)
+    db_building = await building_crud.get(db, building_id)
+    if not db_building or db_building.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Building not found"
+        )
+    return db_building
+
+
+@router.put("/{project_id}/buildings/{building_id}", response_model=BuildingResponse)
+async def update_building(
+    project_id: int,
+    building_id: int,
+    building_data: BuildingUpdate,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Обновить корпус"""
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
     
-    # Применяем пагинацию
-    start = offset
-    end = start + limit
-    return filtered_apartments[start:end] 
+    db_building = await building_crud.get(db, building_id)
+    if not db_building or db_building.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Building not found"
+        )
+    return await building_crud.update(db, db_building, building_data.dict(exclude_unset=True))
+
+
+@router.delete("/{project_id}/buildings/{building_id}")
+async def delete_building(
+    project_id: int,
+    building_id: int,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Удалить корпус"""
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    db_building = await building_crud.get(db, building_id)
+    if not db_building or db_building.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Building not found"
+        )
+    
+    await building_crud.delete(db, building_id)
+    return {"message": "Building deleted"}
+
+
+@router.get("/{project_id}/buildings/{building_id}/apartments", response_model=List[ApartmentResponse])
+async def get_building_apartments(
+    project_id: int,
+    building_id: int,
+    db: AsyncSession = Depends(get_async_session)
+):
+    """Получить список квартир в корпусе"""
+    if not await project_crud.get(db, project_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Project not found"
+        )
+    
+    db_building = await building_crud.get(db, building_id)
+    if not db_building or db_building.project_id != project_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Building not found"
+        )
+    
+    return await apartment_crud.get_by_building(db, building_id) 
