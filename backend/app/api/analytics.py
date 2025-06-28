@@ -92,7 +92,7 @@ async def get_demand_clusters(
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить кластеры спроса для расчета динамических цен"""
-    clusters = await apartment_stats.get_demand_clusters(
+    clusters = await stats_crud.get_demand_clusters(
         db,
         project_id=project_id,
         rooms=rooms

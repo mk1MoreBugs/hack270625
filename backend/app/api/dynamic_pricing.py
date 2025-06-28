@@ -2,12 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database import get_async_session
-from app.models import Apartment, DynamicPricingConfig, PriceHistory, PriceChangeReason
+from app.models import Apartment, DynamicPricingConfig, PriceHistory, PriceChangeReason, User
 from app.schemas import (
     DynamicPricingConfigResponse, DynamicPricingConfigCreate, DynamicPricingConfigUpdate,
     PriceHistoryResponse
 )
 from app.crud import CRUDApartment, CRUDDynamicPricingConfig, CRUDPriceHistory
+from app.security import get_current_active_user, get_current_business
 from datetime import datetime, timedelta
 
 router = APIRouter(prefix="/dynamic-pricing", tags=["dynamic-pricing"])
@@ -17,12 +18,57 @@ pricing_config_crud = CRUDDynamicPricingConfig(DynamicPricingConfig)
 price_history_crud = CRUDPriceHistory(PriceHistory)
 
 
-@router.post("/config", response_model=DynamicPricingConfigResponse)
+@router.post("/config", response_model=DynamicPricingConfigResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    }
+})
 async def create_pricing_config(
     config_data: DynamicPricingConfigCreate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Создать конфигурацию динамического ценообразования"""
+    """
+    Создать конфигурацию динамического ценообразования
+    
+    Args:
+        config_data: Данные для создания конфигурации
+        
+    Returns:
+        DynamicPricingConfigResponse: Созданная конфигурация
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        400: Bad Request - Некорректные данные
+    """
     return await pricing_config_crud.create(db, config_data.dict())
 
 
@@ -65,13 +111,70 @@ async def get_pricing_config(
     return config
 
 
-@router.put("/config/{config_id}", response_model=DynamicPricingConfigResponse)
+@router.put("/config/{config_id}", response_model=DynamicPricingConfigResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Конфигурация не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Configuration not found"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    }
+})
 async def update_pricing_config(
     config_id: int,
     config_data: DynamicPricingConfigUpdate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Обновить конфигурацию"""
+    """
+    Обновить конфигурацию
+    
+    Args:
+        config_id: ID конфигурации
+        config_data: Данные для обновления
+        
+    Returns:
+        DynamicPricingConfigResponse: Обновленная конфигурация
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Конфигурация не найдена
+        400: Bad Request - Некорректные данные
+    """
     db_config = await pricing_config_crud.get(db, config_id)
     if not db_config:
         raise HTTPException(
@@ -81,12 +184,67 @@ async def update_pricing_config(
     return await pricing_config_crud.update(db, db_config, config_data.dict(exclude_unset=True))
 
 
-@router.delete("/config/{config_id}")
+@router.delete("/config/{config_id}", responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Конфигурация не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Configuration not found"
+                }
+            }
+        }
+    },
+    200: {
+        "description": "Конфигурация успешно удалена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Configuration deleted"
+                }
+            }
+        }
+    }
+})
 async def delete_pricing_config(
     config_id: int,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Удалить конфигурацию"""
+    """
+    Удалить конфигурацию
+    
+    Args:
+        config_id: ID конфигурации
+        
+    Returns:
+        dict: Сообщение об успешном удалении
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Конфигурация не найдена
+    """
     if not await pricing_config_crud.delete(db, config_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -95,14 +253,82 @@ async def delete_pricing_config(
     return {"message": "Configuration deleted"}
 
 
-@router.post("/apartments/{apartment_id}/price")
+@router.post("/apartments/{apartment_id}/price", responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Квартира не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Apartment not found"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    },
+    200: {
+        "description": "Цена успешно обновлена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Price updated successfully"
+                }
+            }
+        }
+    }
+})
 async def update_apartment_price(
     apartment_id: int,
     new_price: float,
     reason: PriceChangeReason,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Обновить цену квартиры"""
+    """
+    Обновить цену квартиры
+    
+    Args:
+        apartment_id: ID квартиры
+        new_price: Новая цена
+        reason: Причина изменения цены
+        
+    Returns:
+        dict: Сообщение об успешном обновлении
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Квартира не найдена
+        400: Bad Request - Некорректные данные
+    """
     # Проверяем существование квартиры
     apartment = await apartment_crud.get(db, apartment_id)
     if not apartment:
