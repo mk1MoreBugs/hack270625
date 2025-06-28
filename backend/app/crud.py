@@ -110,17 +110,17 @@ class CRUDProject(CRUDBase[Project]):
     async def get_by_city(self, db: AsyncSession, city: str) -> List[Project]:
         """Получить проекты по городу"""
         result = await db.execute(select(Project).where(Project.city == city))
-        return result.all()
+        return result.scalars().all()
     
     async def get_by_developer(self, db: AsyncSession, developer_id: int) -> List[Project]:
         """Получить проекты застройщика"""
         result = await db.execute(select(Project).where(Project.developer_id == developer_id))
-        return result.all()
+        return result.scalars().all()
     
     async def get_by_class(self, db: AsyncSession, class_type: PropertyClass) -> List[Project]:
         """Получить проекты по классу недвижимости"""
         result = await db.execute(select(Project).where(Project.class_type == class_type))
-        return result.all()
+        return result.scalars().all()
 
 
 class CRUDBuilding(CRUDBase[Building]):
