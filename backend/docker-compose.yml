@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   # PostgreSQL база данных
   postgres:
@@ -5,17 +7,14 @@ services:
     environment:
       POSTGRES_DB: real_estate_db
       POSTGRES_USER: real_estate_user
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD: postgres
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
       - real_estate_network
-    env_file:
-      - .env
-    secrets:
-      - postgres_password
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U real_estate_user -d real_estate_db"]
       interval: 30s
@@ -39,16 +38,13 @@ services:
   app:
     build: .
     environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=real_estate_db
-      - POSTGRES_USER=real_estate_user
-      - POSTGRES_PASSWORD_FILE=/app/db_password.txt
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: real_estate_db
+      POSTGRES_USER: real_estate_user
+      POSTGRES_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     ports:
       - "8000:8000"
     depends_on:
@@ -60,22 +56,18 @@ services:
       - real_estate_network
     volumes:
       - "./app:/backend/app"
-      - ./db_password.txt:/app/db_password.txt:ro
 
   # Celery worker
   celery_worker:
     build: .
     environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=real_estate_db
-      - POSTGRES_USER=real_estate_user
-      - POSTGRES_PASSWORD_FILE=/app/db_password.txt
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: real_estate_db
+      POSTGRES_USER: real_estate_user
+      POSTGRES_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,24 +75,19 @@ services:
         condition: service_healthy
     networks:
       - real_estate_network
-    volumes:
-      - ./db_password.txt:/app/db_password.txt:ro
     command: celery -A app.worker.celery_app worker --loglevel=info
 
   # Celery beat (планировщик задач)
   celery_beat:
     build: .
     environment:
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DB=real_estate_db
-      - POSTGRES_USER=real_estate_user
-      - POSTGRES_PASSWORD_FILE=/app/db_password.txt
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_DB=0
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: real_estate_db
+      POSTGRES_USER: real_estate_user
+      POSTGRES_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
     depends_on:
       postgres:
         condition: service_healthy
@@ -108,8 +95,6 @@ services:
         condition: service_healthy
     networks:
       - real_estate_network
-    volumes:
-      - ./db_password.txt:/app/db_password.txt:ro
     command: celery -A app.worker.celery_app beat --loglevel=info
 
 volumes:
@@ -119,6 +104,4 @@ networks:
   real_estate_network:
     driver: bridge
 
-secrets:
-  postgres_password:
-    file: ./db_password.txt
+
