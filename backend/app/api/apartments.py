@@ -34,8 +34,7 @@ async def get_apartments(
     
     # Применяем фильтры
     filtered_apartments = []
-    for apt_tuple in apartments_list:
-        apt = apt_tuple[0]  # Получаем модель из кортежа
+    for apt in apartments_list:
         # Фильтр по цене
         if min_price is not None and apt.current_price < min_price:
             continue
@@ -56,27 +55,7 @@ async def get_apartments(
         if status and apt.status != status:
             continue
         
-        # Преобразуем модель в схему Pydantic
-        filtered_apartments.append(
-            ApartmentResponse(
-                id=apt.id,
-                number=apt.number,
-                floor=apt.floor,
-                rooms=apt.rooms,
-                area_total=apt.area_total,
-                area_living=apt.area_living,
-                area_kitchen=apt.area_kitchen,
-                base_price=apt.base_price,
-                current_price=apt.current_price,
-                balcony=apt.balcony,
-                loggia=apt.loggia,
-                parking=apt.parking,
-                building_id=apt.building_id,
-                status=apt.status,
-                created_at=apt.created_at,
-                updated_at=apt.updated_at
-            )
-        )
+        filtered_apartments.append(apt)
     
     return filtered_apartments
 
