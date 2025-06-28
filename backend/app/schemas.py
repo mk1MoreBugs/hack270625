@@ -97,7 +97,7 @@ class BuildingBase(BaseModel):
 
 
 class BuildingCreate(BuildingBase):
-    project_id: int
+    project_id: Optional[int] = None
 
 
 class BuildingUpdate(BaseModel):
