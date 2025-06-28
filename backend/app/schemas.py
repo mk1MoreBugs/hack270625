@@ -72,7 +72,7 @@ class ProjectBase(BaseModel):
     address: str
     description: Optional[str] = None
     class_type: PropertyClass
-    commissioning_date: Optional[datetime] = None
+    completion_date: Optional[datetime] = None
 
 
 class ProjectCreate(ProjectBase):
@@ -82,7 +82,7 @@ class ProjectCreate(ProjectBase):
 class ProjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
-    commissioning_date: Optional[datetime] = None
+    completion_date: Optional[datetime] = None
 
 
 class ProjectResponse(ProjectBase):
