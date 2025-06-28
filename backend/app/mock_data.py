@@ -1,542 +1,436 @@
 import json
-from datetime import datetime, timedelta
-from sqlalchemy.ext.asyncio import AsyncSession
-from typing import Dict, List, Any
 import random
-
+from datetime import datetime, timedelta, date
+from typing import List, Dict, Any
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import (
-    Developer, Project, Building, Property,
+    User, Developer, Project, Building, Property,
     PropertyAddress, PropertyPrice, ResidentialProperty,
     PropertyFeatures, PropertyAnalytics, PropertyMedia,
     PromoTag, MortgageProgram, PriceHistory, ViewsLog,
-    Booking, User, UserRole, PropertyType, PropertyCategory, PropertyStatus,
-    BookingStatus, ViewEvent, PriceChangeReason, ViewType, FinishingType, ParkingType
+    Booking, Promotion, UserRole, PropertyType, PropertyCategory,
+    PropertyStatus, BookingStatus, ViewEvent, PriceChangeReason,
+    ViewType, FinishingType, ParkingType
 )
+from app.security import get_password_hash
 
+# Загрузка датасета
+with open("krasnodar_real_estate_dataset.json", "r", encoding="utf-8") as f:
+    DATASET = json.load(f)
 
-def load_krasnodar_dataset() -> List[Dict[str, Any]]:
-    """Загружает 20 случайных объектов из датасета Краснодарского края"""
-    with open("krasnodar_real_estate_dataset.json", "r", encoding="utf-8") as f:
-        data = json.load(f)
-        # Фильтруем только объекты из Краснодарского края и с полными данными
-        krasnodar_data = [
-            item for item in data 
-            if item.get("region") == "Краснодарский край" 
-            and item.get("developer_name") 
-            and item.get("project_name")
-            and item.get("building_id")
-            and item.get("address_full")
-            and item.get("city")
-        ]
-        # Выбираем случайные 20 объектов
-        return random.sample(krasnodar_data, min(20, len(krasnodar_data)))
+# Константы для генерации данных
+DEVELOPER_COMPANIES = list(set(item["developer_name"] for item in DATASET))
+CITIES = list(set(item["city"] for item in DATASET))
+PROJECTS = list(set((item["project_id"], item["project_name"]) for item in DATASET))
+BUILDINGS = list(set(item["building_id"] for item in DATASET))
 
+# Списки для хранения сгенерированных ID
+user_ids = []
+developer_ids = []
+project_ids = []
+building_ids = []
+property_ids = []
 
-async def create_mock_data(session: AsyncSession):
-    """Создает тестовые данные в базе данных используя датасет Краснодарского края"""
-    properties_data = load_krasnodar_dataset()
-    
-    # Словари для хранения уникальных объектов
-    developers: Dict[str, Developer] = {}
-    projects: Dict[str, Project] = {}
-    buildings: Dict[str, Building] = {}
-    
-    # Маппинг русских названий видов на английские
-    view_type_mapping = {
-        'ДВОР': 'YARD',
-        'ЛЕС': 'FOREST',
-        'ГОРОД': 'CITY',
-        'ГОРЫ': 'MOUNTAINS',
-        'МОРЕ': 'SEA',
-        'ПАРК': 'PARK',
-        'СМЕШАННЫЙ': 'MIXED',
-        'РЕКА': 'RIVER'
-    }
-    
-    # Маппинг русских названий типов парковки на английские
-    parking_type_mapping = {
-        'НАЗЕМНАЯ': 'GROUND',
-        'ПОДЗЕМНАЯ': 'UNDERGROUND',
-        'МНОГОУРОВНЕВАЯ': 'MULTILEVEL',
-        'ДВОР': 'YARD',
-        'НЕТ': 'NONE'
-    }
-    
-    # Создаем уникальных застройщиков
-    for prop in properties_data:
-        dev_id = prop.get("developer_id")
-        if dev_id and dev_id not in developers:
-            dev_name = prop.get("developer_name", "").strip()
-            if not dev_name:
-                continue
-                
-            website = f"https://{dev_name.lower().replace(' ', '-').replace('«', '').replace('»', '')}.ru"
-            developer = Developer(
-                id=len(developers) + 1,  # Используем инкрементальные ID
-                name=dev_name,
-                description=f"Надежный застройщик в {prop.get('city', 'Краснодарском крае')}",
-                founding_year=random.randint(1990, 2020),
-                website=website,
-                rating=round(random.uniform(3.5, 5.0), 1),
-                projects_count=random.randint(1, 10)
-            )
-            developers[dev_id] = developer
-            session.add(developer)
-    
-    # Создаем уникальные проекты
-    for prop in properties_data:
-        proj_id = prop.get("project_id")
-        if proj_id and proj_id not in projects:
-            proj_name = prop.get("project_name", "").strip()
-            if not proj_name:
-                continue
-                
-            dev_id = prop.get("developer_id")
-            if not dev_id or dev_id not in developers:
-                continue
-                
-            completion_date = prop.get("completion_date")
-            if not completion_date:
-                continue
-                
-            try:
-                completion_dt = datetime.fromisoformat(completion_date)
-                project = Project(
-                    id=len(projects) + 1,  # Используем инкрементальные ID
-                    name=proj_name,
-                    description=f"Современный жилой комплекс в {prop.get('city', 'Краснодарском крае')}",
-                    developer_id=developers[dev_id].id,
-                    start_date=(completion_dt - timedelta(days=365*3)).date(),
-                    completion_date=completion_dt.date(),
-                    status="active",
-                    total_area=random.randint(10000, 50000),
-                    total_units=random.randint(100, 1000)
-                )
-                projects[proj_id] = project
-                session.add(project)
-            except (ValueError, TypeError):
-                continue
-    
-    # Создаем уникальные здания
-    for prop in properties_data:
-        building_id = prop.get("building_id")
-        if building_id and building_id not in buildings:
-            proj_id = prop.get("project_id")
-            if not proj_id or proj_id not in projects:
-                continue
-                
-            completion_date = prop.get("completion_date")
-            if not completion_date:
-                continue
-                
-            try:
-                completion_dt = datetime.fromisoformat(completion_date)
-                building = Building(
-                    id=len(buildings) + 1,  # Используем инкрементальные ID
-                    project_id=projects[proj_id].id,
-                    number=str(random.randint(1, 10)),
-                    floors_total=prop.get("floors_total") or random.randint(5, 25),
-                    completion_date=completion_dt.date(),
-                    status="under_construction",
-                    total_units=random.randint(50, 200),
-                    available_units=random.randint(10, 50)
-                )
-                buildings[building_id] = building
-                session.add(building)
-            except (ValueError, TypeError):
-                continue
-    
-    # Создаем объекты недвижимости
-    for i, prop in enumerate(properties_data, 1):
-        try:
-            # Проверяем наличие всех необходимых связей
-            dev_id = prop.get("developer_id")
-            proj_id = prop.get("project_id")
-            building_id = prop.get("building_id")
-            
-            if not (dev_id in developers and proj_id in projects and building_id in buildings):
-                continue
-            
-            # Создаем основную запись о недвижимости
-            property = Property(
-                id=i,
-                external_id=prop.get("external_id"),
-                created_at=datetime.fromisoformat(prop["created_at"]),
-                updated_at=datetime.fromisoformat(prop["updated_at"]),
-                property_type=PropertyType.RESIDENTIAL,
-                category=PropertyCategory.FLAT_NEW,
-                developer_id=developers[dev_id].id,
-                project_id=projects[proj_id].id,
-                building_id=buildings[building_id].id,
-                status=PropertyStatus.AVAILABLE,
-                has_3d_tour=prop.get("has_3d_tour", False)
-            )
-            session.add(property)
-            
-            # Создаем адрес
-            if all(prop.get(k) for k in ["address_full", "city", "region", "lat", "lng"]):
-                address = PropertyAddress(
-                    property_id=property.id,
-                    address_full=prop["address_full"],
-                    city=prop["city"],
-                    region=prop["region"],
-                    district=prop.get("district"),
-                    lat=float(prop["lat"]),
-                    lng=float(prop["lng"])
-                )
-                session.add(address)
-            
-            # Создаем цену
-            if all(prop.get(k) for k in ["base_price", "current_price"]):
-                base_price = float(prop["base_price"])
-                current_price = float(prop["current_price"])
-                price = PropertyPrice(
-                    property_id=property.id,
-                    base_price=base_price,
-                    current_price=current_price,
-                    currency="RUB",
-                    price_per_m2=float(prop["price_per_m2"]) if prop.get("price_per_m2") else None,
-                    original_price=base_price,
-                    discount_amount=base_price - current_price if current_price < base_price else None,
-                    discount_percent=round((1 - current_price / base_price) * 100, 2) if current_price < base_price else None
-                )
-                session.add(price)
-            
-            # Создаем детали жилой недвижимости
-            if prop.get("completion_date"):
-                residential = ResidentialProperty(
-                    property_id=property.id,
-                    unit_number=prop.get("unit_number"),
-                    floor=prop.get("floor"),
-                    floors_total=prop.get("floors_total"),
-                    rooms=prop.get("rooms"),
-                    is_studio=prop.get("is_studio", False),
-                    is_free_plan=prop.get("is_free_plan", False),
-                    total_area=float(prop["total_area"]) if prop.get("total_area") else None,
-                    living_area=float(prop["living_area"]) if prop.get("living_area") else None,
-                    kitchen_area=float(prop["kitchen_area"]) if prop.get("kitchen_area") else None,
-                    ceiling_height=float(prop["ceiling_height"]) if prop.get("ceiling_height") else None,
-                    completion_date=datetime.fromisoformat(prop["completion_date"])
-                )
-                session.add(residential)
-            
-            # Создаем характеристики
-            view_type = None
-            if prop.get('view'):
-                view_type = view_type_mapping.get(prop['view'].upper())
-            
-            parking_type = None
-            if prop.get('parking_type'):
-                parking_type = parking_type_mapping.get(prop['parking_type'].upper())
-            
-            features = PropertyFeatures(
-                property_id=property.id,
-                balcony=prop.get("balcony", False),
-                loggia=prop.get("loggia", False),
-                terrace=prop.get("terrace", False),
-                view=view_type,
-                finishing=prop.get("finishing"),
-                parking_type=parking_type,
-                parking_price=prop.get("parking_price"),
-                has_furniture=prop.get("has_furniture"),
-                has_appliances=prop.get("has_appliances")
-            )
-            session.add(features)
-            
-            # Создаем аналитику
-            analytics = PropertyAnalytics(
-                property_id=property.id,
-                days_on_market=int(prop.get("days_on_market", 0)),
-                rli_index=float(prop["rli_index"]) if prop.get("rli_index") else None,
-                demand_score=int(prop["demand_score"]) if prop.get("demand_score") else None,
-                clicks_total=int(prop.get("clicks_total", 0)),
-                favourites_total=int(prop.get("favourites_total", 0)),
-                bookings_total=int(prop.get("bookings_total", 0)),
-                views_last_week=random.randint(10, 100),
-                views_last_month=random.randint(50, 500),
-                price_trend=random.uniform(-5.0, 5.0)
-            )
-            session.add(analytics)
-            
-            # Создаем медиа
-            media_data = prop.get("media", {})
-            if isinstance(media_data, dict):
-                media = PropertyMedia(
-                    property_id=property.id,
-                    layout_image_url=media_data.get("layout_image_url"),
-                    vr_tour_url=media_data.get("vr_tour_url"),
-                    video_url=media_data.get("video_url"),
-                    main_photo_url=f"https://krasnodar-realty.ru/photos/{property.id}/main.jpg",
-                    photo_urls=[f"https://krasnodar-realty.ru/photos/{property.id}/{j}.jpg" for j in range(1, 6)]
-                )
-                session.add(media)
-            
-            # Создаем промо-теги
-            for tag in prop.get("promo_tags", []):
-                if tag and isinstance(tag, str):
-                    promo_tag = PromoTag(
-                        property_id=property.id,
-                        tag=tag,
-                        active=True,
-                        expires_at=datetime.now() + timedelta(days=random.randint(30, 90))
-                    )
-                    session.add(promo_tag)
-            
-            # Создаем ипотечные программы
-            if prop.get("mortgage_program_ids"):
-                program = MortgageProgram(
-                    property_id=property.id,
-                    name="Семейная ипотека",
-                    bank_name="СберБанк",
-                    interest_rate=random.uniform(3.0, 7.0),
-                    down_payment_percent=random.uniform(10.0, 20.0),
-                    term_years=random.randint(10, 30),
-                    monthly_payment=float(prop["current_price"]) * 0.004 if prop.get("current_price") else None,
-                    requirements="Требуется подтверждение дохода"
-                )
-                session.add(program)
-        except (ValueError, TypeError, KeyError) as e:
-            print(f"Ошибка при создании объекта недвижимости: {e}")
-            continue
-    
-    # Сохраняем все изменения
-    await session.commit()
-    
-    # Выводим информацию о завершении
-    print("\n✨ Готово! Тестовые данные успешно созданы.")
-    print("📊 Создано:")
-    print(f"   - {len(properties_data)} объектов недвижимости")
-    print(f"   - {len(developers)} застройщиков")
-    print(f"   - {len(projects)} проектов")
-    print(f"   - {len(buildings)} зданий")
-    print("   - Тестовые пользователи и дополнительные данные")
+# Константы для генерации данных
+DISTRICTS = ["Центральный", "Западный", "Карасунский", "Прикубанский", "Фестивальный"]
+STREETS = ["Красная", "Северная", "Кубанская", "Ставропольская", "Российская"]
 
-# Тестовые пользователи
-test_users = [
-    User(
-        id=1,
-        email="buyer@krasnodar-realty.ru",
-        hashed_password="$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiGpJ4vZKkyu",  # test_password
-        display_name="Иван Покупатель",
-        role=UserRole.BUYER,
-        phone="+7 (918) 123-45-67"
-    ),
-    User(
-        id=2,
-        email="developer@krasnodar-realty.ru",
-        hashed_password="$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiGpJ4vZKkyu",  # test_password
-        display_name="ООО Застройщик",
-        role=UserRole.DEVELOPER,
-        phone="+7 (918) 765-43-21"
-    ),
-    User(
-        id=3,
-        email="admin@krasnodar-realty.ru",
-        hashed_password="$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewKyNiGpJ4vZKkyu",  # test_password
+async def create_mock_users(session: AsyncSession) -> List[int]:
+    """Создание тестовых пользователей"""
+    users = []
+    
+    # Создаем админа
+    admin = User(
+        email="admin@example.com",
+        hashed_password=get_password_hash("admin123"),
         display_name="Администратор",
         role=UserRole.ADMIN,
-        phone="+7 (918) 999-99-99"
+        phone="+7900000000"
     )
-]
+    users.append(admin)
+    
+    # Создаем покупателей (25)
+    for i in range(25):
+        user = User(
+            email=f"buyer{i+1}@example.com",
+            hashed_password=get_password_hash(f"buyer{i+1}"),
+            display_name=f"Покупатель {i+1}",
+            role=UserRole.BUYER,
+            phone=f"+7911{i:07d}"
+        )
+        users.append(user)
+    
+    # Создаем застройщиков (25)
+    for i in range(25):
+        user = User(
+            email=f"developer{i+1}@example.com",
+            hashed_password=get_password_hash(f"developer{i+1}"),
+            display_name=f"Застройщик {i+1}",
+            role=UserRole.DEVELOPER,
+            phone=f"+7922{i:07d}",
+            company_name=f"Строительная компания {i+1}"
+        )
+        users.append(user)
+    
+    # Сохраняем пользователей
+    for user in users:
+        session.add(user)
+    
+    await session.commit()
+    user_ids.extend([user.id for user in users])
+    return user_ids
 
-# Тестовый застройщик
-test_developer = Developer(
-    id=999,
-    name="Краснодар Девелопмент",
-    description="Ведущий застройщик жилой и коммерческой недвижимости в Краснодарском крае",
-    founding_year=2010,
-    website="https://krasnodar-development.ru",
-    rating=4.8,
-    projects_count=12
-)
+async def create_mock_developers(session: AsyncSession) -> List[int]:
+    """Создание тестовых застройщиков"""
+    developers = []
+    
+    for i in range(25):
+        developer = Developer(
+            name=f"Строительная компания {i+1}",
+            description=f"Крупный застройщик в Краснодарском крае. Компания специализируется на строительстве современных жилых комплексов.",
+            founding_year=random.randint(1990, 2020),
+            website=f"https://developer{i+1}.ru",
+            rating=round(random.uniform(4.0, 5.0), 1),
+            projects_count=random.randint(1, 5)
+        )
+        developers.append(developer)
+    
+    # Сохраняем застройщиков
+    for developer in developers:
+        session.add(developer)
+    
+    await session.commit()
+    developer_ids.extend([d.id for d in developers])
+    return developer_ids
 
-# Тестовый проект
-test_project = Project(
-    id=999,
-    name="ЖК Южный Парк",
-    developer_id=999,
-    description="Современный жилой комплекс бизнес-класса в центре Краснодара",
-    start_date=datetime.now().date(),
-    completion_date=(datetime.now() + timedelta(days=365*2)).date(),
-    status="active",
-    total_area=75000.0,
-    total_units=800
-)
+async def create_mock_projects(session: AsyncSession) -> List[int]:
+    """Создание тестовых проектов"""
+    projects = []
+    
+    for i in range(20):
+        project = Project(
+            name=f"ЖК Южный {i+1}",
+            developer_id=random.choice(developer_ids),
+            description=f"Современный жилой комплекс в {random.choice(CITIES)}",
+            start_date=date.today() - timedelta(days=random.randint(100, 500)),
+            completion_date=date.today() + timedelta(days=random.randint(100, 500)),
+            status=random.choice(["active", "completed"]),
+            total_area=random.randint(5000, 50000),
+            total_units=random.randint(100, 1000)
+        )
+        projects.append(project)
+    
+    # Сохраняем проекты
+    for project in projects:
+        session.add(project)
+    
+    await session.commit()
+    project_ids.extend([p.id for p in projects])
+    return project_ids
 
-# Тестовое здание
-test_building = Building(
-    id=999,
-    project_id=999,
-    number="3А",
-    floors_total=24,
-    completion_date=(datetime.now() + timedelta(days=365)).date(),
-    status="under_construction",
-    total_units=240,
-    available_units=180
-)
+async def create_mock_buildings(session: AsyncSession) -> List[int]:
+    """Создание тестовых зданий"""
+    buildings = []
+    
+    for i in range(50):
+        project_id = random.choice(project_ids)
+        building = Building(
+            project_id=project_id,
+            number=str(random.randint(1, 10)),
+            floors_total=random.randint(5, 25),
+            completion_date=date.today() + timedelta(days=random.randint(100, 500)),
+            status=random.choice(["under_construction", "completed"]),
+            total_units=random.randint(50, 200),
+            available_units=random.randint(10, 50)
+        )
+        buildings.append(building)
+    
+    # Сохраняем здания
+    for building in buildings:
+        session.add(building)
+    
+    await session.commit()
+    building_ids.extend([b.id for b in buildings])
+    return building_ids
 
-# Создаем тестовый объект недвижимости
-test_property = Property(
-    id=1,
-    external_id="TEST-001",
-    property_type=PropertyType.RESIDENTIAL,
-    category=PropertyCategory.FLAT_NEW,
-    developer_id=1,
-    project_id=1,
-    building_id=1,
-    status=PropertyStatus.AVAILABLE,
-    has_3d_tour=True
-)
+async def create_mock_properties(session: AsyncSession) -> List[int]:
+    """Создание тестовых объектов недвижимости"""
+    properties = []
+    
+    for i in range(100):
+        property = Property(
+            external_id=f"PROP{i+1}",
+            property_type=PropertyType.RESIDENTIAL,
+            category=PropertyCategory.FLAT_NEW,
+            developer_id=random.choice(developer_ids),
+            project_id=random.choice(project_ids),
+            building_id=random.choice(building_ids),
+            status=random.choice(list(PropertyStatus)),
+            has_3d_tour=random.choice([True, False])
+        )
+        properties.append(property)
+    
+    # Сохраняем объекты недвижимости
+    for property in properties:
+        session.add(property)
+    
+    await session.commit()
+    property_ids.extend([p.id for p in properties])
+    return property_ids
 
-# Создаем тестовый адрес
-test_address = PropertyAddress(
-    property_id=1,
-    address_full="ул. Красная, д. 1",
-    city="Краснодар",
-    region="Краснодарский край",
-    district="Центральный",
-    lat=45.0355,
-    lng=38.9750,
-    postal_code="350000"
-)
+async def create_mock_addresses(session: AsyncSession) -> None:
+    """Создание тестовых адресов"""
+    addresses = []
+    
+    for i, property_id in enumerate(property_ids):
+        city = random.choice(CITIES)
+        district = random.choice(DISTRICTS)
+        street = random.choice(STREETS)
+        building_num = random.randint(1, 100)
+        
+        address = PropertyAddress(
+            property_id=property_id,
+            address_full=f"г. {city}, ул. {street}, д. {building_num}",
+            city=city,
+            region="Краснодарский край",
+            district=district,
+            lat=random.uniform(43.5, 45.5),
+            lng=random.uniform(38.5, 40.5),
+            postal_code=f"35{random.randint(1000, 9999)}"
+        )
+        addresses.append(address)
+    
+    # Сохраняем адреса
+    for address in addresses:
+        session.add(address)
+    
+    await session.commit()
 
-# Создаем тестовую цену
-test_price = PropertyPrice(
-    property_id=1,
-    base_price=5000000.0,
-    current_price=4800000.0,
-    currency="RUB",
-    price_per_m2=100000.0,
-    original_price=5000000.0,
-    discount_amount=200000.0,
-    discount_percent=4.0
-)
+async def create_mock_prices(session: AsyncSession) -> None:
+    """Создание тестовых цен"""
+    prices = []
+    
+    for property_id in property_ids:
+        base_price = random.randint(3000000, 15000000)
+        current_price = base_price * random.uniform(0.9, 1.1)
+        area = random.uniform(30, 120)
+        
+        price = PropertyPrice(
+            property_id=property_id,
+            base_price=base_price,
+            current_price=current_price,
+            currency="RUB",
+            price_per_m2=round(current_price / area, 2),
+            original_price=base_price,
+            discount_amount=base_price - current_price if current_price < base_price else None,
+            discount_percent=round((1 - current_price / base_price) * 100, 2) if current_price < base_price else None
+        )
+        prices.append(price)
+    
+    # Сохраняем цены
+    for price in prices:
+        session.add(price)
+    
+    await session.commit()
 
-# Создаем тестовые характеристики жилой недвижимости
-test_residential = ResidentialProperty(
-    property_id=1,
-    unit_number="123",
-    floor=10,
-    floors_total=20,
-    rooms=2,
-    is_studio=False,
-    is_free_plan=False,
-    total_area=60.5,
-    living_area=40.0,
-    kitchen_area=12.0,
-    ceiling_height=2.8,
-    completion_date=datetime.now() + timedelta(days=180)
-)
+async def create_mock_residential_properties(session: AsyncSession) -> None:
+    """Создание тестовых характеристик жилой недвижимости"""
+    residential_properties = []
+    
+    for i, item in enumerate(DATASET[:200]):
+        residential = ResidentialProperty(
+            property_id=property_ids[i],
+            unit_number=item["unit_number"],
+            floor=item["floor"],
+            floors_total=item["floors_total"],
+            rooms=item["rooms"],
+            is_studio=item["is_studio"],
+            is_free_plan=item["is_free_plan"],
+            total_area=item["total_area"],
+            living_area=item["living_area"],
+            kitchen_area=item["kitchen_area"],
+            ceiling_height=item["ceiling_height"],
+            completion_date=datetime.strptime(
+                item["completion_date"][:10],
+                "%Y-%m-%d"
+            ) if item["completion_date"] else None
+        )
+        residential_properties.append(residential)
+    
+    # Сохраняем характеристики
+    for residential in residential_properties:
+        session.add(residential)
+    
+    await session.commit()
 
-# Создаем тестовые особенности
-test_features = PropertyFeatures(
-    property_id=1,
-    balcony=True,
-    loggia=False,
-    terrace=False,
-    view="город",
-    finishing="чистовая",
-    parking_type="подземный_паркинг",
-    parking_price=500000.0,
-    has_furniture=False,
-    has_appliances=False
-)
+async def create_mock_features(session: AsyncSession) -> None:
+    """Создание тестовых особенностей недвижимости"""
+    features = []
+    
+    for i, item in enumerate(DATASET[:200]):
+        if company is None:
+            continue
+        feature = PropertyFeatures(
+            property_id=property_ids[i],
+            balcony=item["balcony"],
+            loggia=item["loggia"],
+            terrace=item["terrace"],
+            view=item["view"].lower() if item.get("view") else None,
+            finishing=item["finishing"],
+            parking_type=item["parking_type"],
+            parking_price=item.get("parking_price"),
+            has_furniture=random.choice([True, False]),
+            has_appliances=random.choice([True, False])
+        )
+        features.append(feature)
+    
+    # Сохраняем особенности
+    for feature in features:
+        session.add(feature)
+    
+    await session.commit()
 
-# Создаем тестовую аналитику
-test_analytics = PropertyAnalytics(
-    property_id=1,
-    days_on_market=30,
-    rli_index=0.8,
-    demand_score=75,
-    clicks_total=150,
-    favourites_total=20,
-    bookings_total=2,
-    views_last_week=50,
-    views_last_month=200,
-    price_trend=1.5
-)
+async def create_mock_analytics(session: AsyncSession) -> None:
+    """Создание тестовой аналитики"""
+    analytics = []
+    
+    for i, item in enumerate(DATASET[:200]):
+        analytic = PropertyAnalytics(
+            property_id=property_ids[i],
+            days_on_market=item["days_on_market"],
+            rli_index=item["rli_index"],
+            demand_score=item["demand_score"],
+            clicks_total=item["clicks_total"],
+            favourites_total=item["favourites_total"],
+            bookings_total=item["bookings_total"],
+            views_last_week=random.randint(10, 100),
+            views_last_month=random.randint(50, 500),
+            price_trend=random.uniform(-5.0, 5.0)
+        )
+        analytics.append(analytic)
+    
+    # Сохраняем аналитику
+    for analytic in analytics:
+        session.add(analytic)
+    
+    await session.commit()
 
-# Создаем тестовые медиа
-test_media = PropertyMedia(
-    property_id=1,
-    layout_image_url="https://example.com/layout.jpg",
-    vr_tour_url="https://example.com/vr_tour",
-    video_url="https://example.com/video.mp4",
-    main_photo_url="https://example.com/main.jpg",
-    photo_urls=["https://example.com/photo1.jpg", "https://example.com/photo2.jpg"]
-)
+async def create_mock_media(session: AsyncSession) -> None:
+    """Создание тестовых медиа"""
+    media_items = []
+    
+    for property_id in property_ids:
+        # Создаем 1-2 медиа для каждого объекта (всего примерно 150)
+        for _ in range(random.randint(1, 2)):
+            media = PropertyMedia(
+                property_id=property_id,
+                layout_image_url=f"https://example.com/layouts/{property_id}.jpg",
+                vr_tour_url=f"https://example.com/vr/{property_id}" if random.random() > 0.5 else None,
+                video_url=f"https://example.com/videos/{property_id}.mp4" if random.random() > 0.7 else None,
+                main_photo_url=f"https://example.com/photos/{property_id}/main.jpg",
+                photo_urls=[f"https://example.com/photos/{property_id}/{j}.jpg" for j in range(1, 6)]
+            )
+            media_items.append(media)
+    
+    # Сохраняем медиа
+    for media in media_items:
+        session.add(media)
+    
+    await session.commit()
 
-# Создаем тестовые промо-теги
-test_promo_tag = PromoTag(
-    property_id=1,
-    tag="Акция",
-    active=True,
-    expires_at=datetime.now() + timedelta(days=30)
-)
+async def create_mock_promotions(session: AsyncSession) -> None:
+    """Создание тестовых акций"""
+    promotions = []
+    
+    promo_names = [
+        "Скидка 10% при полной оплате",
+        "Рассрочка 0% на 12 месяцев",
+        "Кладовка в подарок",
+        "Паркинг со скидкой 50%",
+        "Первый взнос от 10%",
+        "Ипотека от 4.5%",
+        "Материнский капитал",
+        "Военная ипотека",
+        "Trade-in",
+        "Бронирование за 20 000 ₽"
+    ]
+    
+    for promo_name in promo_names:
+        promotion = Promotion(
+            name=promo_name,
+            description=f"Выгодное предложение для покупателей: {promo_name}",
+            discount_percent=random.randint(5, 20),
+            starts_at=datetime.now() - timedelta(days=random.randint(1, 30)),
+            ends_at=datetime.now() + timedelta(days=random.randint(30, 90)),
+            conditions=json.dumps({
+                "min_price": 1000000,
+                "max_price": 10000000,
+                "property_types": ["flat_new"]
+            }),
+            is_active=True,
+            max_uses=random.randint(10, 100),
+            current_uses=random.randint(0, 10)
+        )
+        promotions.append(promotion)
+    
+    # Сохраняем акции
+    for promotion in promotions:
+        session.add(promotion)
+    
+    await session.commit()
 
-# Создаем тестовую ипотечную программу
-test_mortgage = MortgageProgram(
-    id=1,
-    property_id=1,
-    name="Семейная ипотека",
-    bank_name="СберБанк",
-    interest_rate=5.5,
-    down_payment_percent=15.0,
-    term_years=20,
-    monthly_payment=35000.0,
-    requirements='{"age": "21-65", "employment": "official"}'
-)
+async def create_mock_bookings(session: AsyncSession) -> None:
+    """Создание тестовых броней"""
+    bookings = []
+    
+    for _ in range(50):
+        booking = Booking(
+            property_id=random.choice(property_ids),
+            user_id=random.choice(user_ids[:26]),  # Только покупатели (25 + админ)
+            status=random.choice(list(BookingStatus)),
+            booked_at=datetime.now() - timedelta(days=random.randint(1, 30)),
+            expires_at=datetime.now() + timedelta(days=random.randint(1, 14)),
+            payment_status=random.choice(["pending", "paid", "cancelled"]),
+            booking_fee=random.randint(10000, 50000)
+        )
+        bookings.append(booking)
+    
+    # Сохраняем брони
+    for booking in bookings:
+        session.add(booking)
+    
+    await session.commit()
 
-# Создаем тестовую историю цен
-test_price_history = PriceHistory(
-    id=1,
-    property_id=1,
-    changed_at=datetime.now() - timedelta(days=7),
-    old_price=5000000.0,
-    new_price=4800000.0,
-    reason=PriceChangeReason.PROMO,
-    description="Сезонная акция"
-)
-
-# Создаем тестовый лог просмотров
-test_views_log = ViewsLog(
-    id=1,
-    property_id=1,
-    user_id=1,
-    event=ViewEvent.VIEW,
-    occurred_at=datetime.now() - timedelta(hours=2),
-    source="web",
-    session_id="test_session"
-)
-
-# Создаем тестовое бронирование
-test_booking = Booking(
-    id=1,
-    property_id=1,
-    user_id=1,
-    status=BookingStatus.ACTIVE,
-    booked_at=datetime.now() - timedelta(days=1),
-    expires_at=datetime.now() + timedelta(days=2),
-    payment_status="pending",
-    booking_fee=10000.0
-)
-
-# Список всех тестовых данных
-test_data = {
-    "users": test_users,
-    "developer": test_developer,
-    "project": test_project,
-    "building": test_building,
-    "property": test_property,
-    "address": test_address,
-    "price": test_price,
-    "residential": test_residential,
-    "features": test_features,
-    "analytics": test_analytics,
-    "media": test_media,
-    "promo_tag": test_promo_tag,
-    "mortgage": test_mortgage,
-    "price_history": test_price_history,
-    "views_log": test_views_log,
-    "booking": test_booking
-}
+async def create_all_mock_data(session: AsyncSession) -> None:
+    """Создание всех моковых данных"""
+    print("Создание пользователей...")
+    await create_mock_users(session)
+    
+    print("Создание застройщиков...")
+    await create_mock_developers(session)
+    
+    print("Создание проектов...")
+    await create_mock_projects(session)
+    
+    print("Создание зданий...")
+    await create_mock_buildings(session)
+    
+    print("Создание объектов недвижимости...")
+    await create_mock_properties(session)
+    
+    print("Создание адресов...")
+    await create_mock_addresses(session)
+    
+    print("Создание цен...")
+    await create_mock_prices(session)
+    
+    print("Создание медиа...")
+    await create_mock_media(session)
+    
+    print("Создание акций...")
+    await create_mock_promotions(session)
+    
+    print("Создание броней...")
+    await create_mock_bookings(session)
+    
+    print("Моковые данные успешно созданы!")

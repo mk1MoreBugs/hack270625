@@ -4,7 +4,6 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from app.models import Property, PropertyAnalytics, ViewsLog, Booking
 from app.crud import CRUDPropertyAnalytics
-from uuid import UUID
 
 
 class StatsAggregatorService:

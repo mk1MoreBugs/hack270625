@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from uuid import UUID
 from app.database import get_async_session
 from app.models import WebhookInbox, User
 from app.schemas import WebhookRead, WebhookCreate, Message

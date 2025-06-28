@@ -5,7 +5,8 @@ from app.models import User, UserRole
 from app.crud import CRUDUser
 from app.schemas import (
     TokenResponse, UserLogin, BuyerRegister,
-    DeveloperRegister, AdminRegister, RefreshToken
+    DeveloperRegister, AdminRegister, RefreshToken,
+    UserCreate, UserRead, Token
 )
 from app.security import (
     get_password_hash, verify_password,
@@ -13,154 +14,83 @@ from app.security import (
 )
 import jwt
 from app.config import settings
+from typing import Optional
 
 router = APIRouter(
-    prefix="/api/v1/auth",
+    prefix="/auth",
     tags=["auth"]
 )
 
 
 @router.post(
-    "/register/buyer",
-    response_model=TokenResponse,
-    summary="Регистрация покупателя",
-    description="Регистрация нового пользователя с ролью покупателя",
+    "/register",
+    response_model=UserRead,
+    summary="Регистрация нового пользователя",
+    description="""
+    Регистрация нового пользователя в системе.
+    
+    Доступные роли:
+    - buyer: Покупатель
+    - developer: Застройщик (требуется указать company_name)
+    - admin: Администратор
+    
+    Поле company_name является обязательным только для роли developer.
+    """,
     responses={
-        400: {"description": "Email уже зарегистрирован"},
+        400: {"description": "Неверные данные регистрации"},
         422: {"description": "Ошибка валидации"}
     }
 )
-async def register_buyer(
-    user_data: BuyerRegister,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Регистрация покупателя"""
-    user_crud = CRUDUser(User)
-    
-    # Проверяем, не существует ли уже пользователь с таким email
-    if await user_crud.get_by_email(db, user_data.email):
+async def register(
+    user_data: UserCreate,
+    session: AsyncSession = Depends(get_async_session)
+) -> UserRead:
+    """Регистрация нового пользователя"""
+    # Проверяем, что company_name указано для developer
+    if user_data.role == UserRole.DEVELOPER and not user_data.company_name:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email уже зарегистрирован"
+            detail="Для роли developer необходимо указать company_name"
         )
     
-    # Создаем пользователя
+    # Проверяем, что company_name не указано для других ролей
+    if user_data.role != UserRole.DEVELOPER and user_data.company_name:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Поле company_name доступно только для роли developer"
+        )
+
+    # Проверяем существование пользователя
+    existing_user = await session.get(User, user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Пользователь с таким email уже существует"
+        )
+
+    # Создаем нового пользователя
     hashed_password = get_password_hash(user_data.password)
-    user_dict = user_data.dict()
-    user_dict["hashed_password"] = hashed_password
-    del user_dict["password"]
-    
-    user = await user_crud.create(db, user_dict)
-    
-    # Создаем токены
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id)
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
+    user = User(
+        email=user_data.email,
+        hashed_password=hashed_password,
+        display_name=user_data.display_name,
+        role=user_data.role,
+        phone=user_data.phone,
+        company_name=user_data.company_name if user_data.role == UserRole.DEVELOPER else None
     )
-
-
-@router.post(
-    "/register/developer",
-    response_model=TokenResponse,
-    summary="Регистрация застройщика",
-    description="Регистрация нового пользователя с ролью застройщика",
-    responses={
-        400: {
-            "description": "Email уже зарегистрирован или застройщик с таким ИНН уже существует"
-        },
-        422: {"description": "Ошибка валидации"}
-    }
-)
-async def register_developer(
-    user_data: DeveloperRegister,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Регистрация застройщика"""
-    user_crud = CRUDUser(User)
     
-    # Проверяем, не существует ли уже пользователь с таким email
-    if await user_crud.get_by_email(db, user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email уже зарегистрирован"
-        )
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
     
-    # Проверяем, не существует ли уже застройщик с таким ИНН
-    existing_developer = await user_crud.get_by_inn(db, user_data.inn)
-    if existing_developer:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Застройщик с таким ИНН уже существует"
-        )
-    
-    # Создаем пользователя
-    hashed_password = get_password_hash(user_data.password)
-    user_dict = user_data.dict()
-    user_dict["hashed_password"] = hashed_password
-    del user_dict["password"]
-    
-    user = await user_crud.create(db, user_dict)
-    
-    # Создаем токены
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id)
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
-
-
-@router.post(
-    "/register/admin",
-    response_model=TokenResponse,
-    summary="Регистрация администратора",
-    description="Регистрация нового пользователя с ролью администратора",
-    responses={
-        400: {"description": "Email уже зарегистрирован"},
-        422: {"description": "Ошибка валидации"}
-    }
-)
-async def register_admin(
-    user_data: AdminRegister,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """Регистрация администратора"""
-    user_crud = CRUDUser(User)
-    
-    # Проверяем, не существует ли уже пользователь с таким email
-    if await user_crud.get_by_email(db, user_data.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Email уже зарегистрирован"
-        )
-    
-    # Создаем пользователя
-    hashed_password = get_password_hash(user_data.password)
-    user_dict = user_data.dict()
-    user_dict["hashed_password"] = hashed_password
-    del user_dict["password"]
-    
-    user = await user_crud.create(db, user_dict)
-    
-    # Создаем токены
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id)
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
+    return UserRead.from_orm(user)
 
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
+    response_model=Token,
     summary="Вход в систему",
-    description="Аутентификация пользователя и получение токенов доступа",
+    description="Авторизация пользователя и получение токена доступа",
     responses={
         401: {"description": "Неверный email или пароль"},
         400: {"description": "Неактивный пользователь"},
@@ -168,14 +98,15 @@ async def register_admin(
     }
 )
 async def login(
-    user_data: UserLogin,
-    db: AsyncSession = Depends(get_async_session)
-):
+    email: str,
+    password: str,
+    session: AsyncSession = Depends(get_async_session)
+) -> Token:
     """Вход пользователя"""
     user_crud = CRUDUser(User)
     
     # Получаем пользователя по email
-    user = await user_crud.get_by_email(db, user_data.email)
+    user = await user_crud.get_by_email(session, email)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -183,7 +114,7 @@ async def login(
         )
     
     # Проверяем пароль
-    if not verify_password(user_data.password, user.hashed_password):
+    if not verify_password(password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный email или пароль"
@@ -196,14 +127,8 @@ async def login(
             detail="Неактивный пользователь"
         )
     
-    # Создаем токены
-    access_token = create_access_token(user.id, user.role)
-    refresh_token = create_refresh_token(user.id)
-    
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token
-    )
+    access_token = create_access_token(data={"sub": user.email, "role": user.role})
+    return Token(access_token=access_token, token_type="bearer")
 
 
 @router.post(
@@ -219,7 +144,7 @@ async def login(
 )
 async def refresh_tokens(
     token_data: RefreshToken,
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ):
     """Обновление токенов"""
     try:
@@ -241,7 +166,7 @@ async def refresh_tokens(
         
         # Получаем пользователя
         user_crud = CRUDUser(User)
-        user = await user_crud.get(db, user_id)
+        user = await user_crud.get(session, user_id)
         
         if not user or not user.is_active:
             raise HTTPException(
