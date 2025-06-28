@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from uuid import UUID
 from app.database import get_async_session
 from app.models import Booking, Property, BookingStatus, User
 from app.schemas import (
@@ -223,7 +222,7 @@ async def get_user_bookings(
 
 @router.get("/property/{property_id}", response_model=List[BookingRead])
 async def get_property_bookings(
-    property_id: UUID,
+    property_id: int,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить бронирования объекта недвижимости"""
@@ -232,7 +231,7 @@ async def get_property_bookings(
 
 @router.get("/property/{property_id}/recent", response_model=List[BookingRead])
 async def get_recent_property_bookings(
-    property_id: UUID,
+    property_id: int,
     hours: int = 24,
     db: AsyncSession = Depends(get_async_session)
 ):

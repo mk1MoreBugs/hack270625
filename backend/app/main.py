@@ -5,9 +5,10 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.config import settings
 from app.database import create_db_and_tables
 from app.api import (
-    properties, developers, projects, buildings, 
-    addresses, prices, media, dynamic_pricing, users, bookings, 
-    promotions, analytics, map, ai_matching, webhooks, auth
+    auth, buildings, properties, users,
+    addresses, analytics, bookings, developers,
+    dynamic_pricing, map, media, prices, promotions,
+    webhooks, projects
 )
 import secrets
 
@@ -52,9 +53,9 @@ async def lifespan(app: FastAPI):
 
 # Create FastAPI application
 app = FastAPI(
-    title="Real Estate 4.0 API",
-    description="API для платформы динамического ценообразования в сфере недвижимости",
-    version=settings.version,
+    title="Real Estate API",
+    description="API для работы с недвижимостью",
+    version="1.0.0",
     lifespan=lifespan,
     openapi_url=f"{settings.api_v1_str}/openapi.json",
     #docs_url=None,  # Disable default endpoints
@@ -64,42 +65,34 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include all routers
-app.include_router(auth.router, prefix=settings.api_v1_str)
-app.include_router(users.router, prefix=settings.api_v1_str)
-app.include_router(developers.router, prefix=settings.api_v1_str)
-app.include_router(projects.router, prefix=settings.api_v1_str)
-app.include_router(buildings.router, prefix=settings.api_v1_str)
-app.include_router(properties.router, prefix=settings.api_v1_str)
-app.include_router(addresses.router, prefix=settings.api_v1_str)
-app.include_router(prices.router, prefix=settings.api_v1_str)
-app.include_router(media.router, prefix=settings.api_v1_str)
-app.include_router(bookings.router, prefix=settings.api_v1_str)
-app.include_router(promotions.router, prefix=settings.api_v1_str)
-app.include_router(analytics.router, prefix=settings.api_v1_str)
-app.include_router(dynamic_pricing.router, prefix=settings.api_v1_str)
-app.include_router(ai_matching.router, prefix=settings.api_v1_str)
-app.include_router(map.router, prefix=settings.api_v1_str)
-app.include_router(webhooks.router, prefix=settings.api_v1_str)
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(developers.router, prefix="/api/v1")
+app.include_router(buildings.router, prefix="/api/v1")
+app.include_router(properties.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(addresses.router, prefix="/api/v1")
+app.include_router(prices.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
+app.include_router(bookings.router, prefix="/api/v1")
+app.include_router(promotions.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(dynamic_pricing.router, prefix="/api/v1")
+app.include_router(map.router, prefix="/api/v1")
+app.include_router(webhooks.router, prefix="/api/v1")
 
 
-@app.get(
-    "/",
-    tags=["default"],
-    summary="Корневой эндпоинт",
-    description="Возвращает основную информацию о сервисе"
-)
+@app.get("/")
 async def root():
-    """Корневой эндпоинт"""
     return {
-        "name": settings.project_name,
-        "version": settings.version,
+        "message": "Добро пожаловать в API для работы с недвижимостью",
         "docs_url": "/docs",
         "redoc_url": "/redoc"
     }

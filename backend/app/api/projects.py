@@ -1,178 +1,107 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
 from app.database import get_async_session
-from app.models import Project
-from app.schemas import ProjectCreate, ProjectRead, ProjectUpdate
-from app.crud import crud_project
-from app.security import get_current_user
-from app.models import User
+from app.models import Project, UserRole
+from app.schemas import ProjectCreate, ProjectUpdate, ProjectRead
+from app.security import get_current_user_role
+from typing import List
 
-router = APIRouter(
-    prefix="/api/v1/project",
-    tags=["projects"]
-)
+router = APIRouter(prefix="/projects", tags=["projects"])
 
-
-@router.get(
-    "/",
-    response_model=List[ProjectRead],
-    summary="Получить список проектов",
-    description="Возвращает список всех проектов с возможностью фильтрации по застройщику"
-)
+@router.get("/", response_model=List[ProjectRead],
+            summary="Получить список проектов",
+            description="Получение списка всех доступных проектов")
 async def get_projects(
-    developer_id: Optional[int] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ) -> List[ProjectRead]:
-    """
-    Получить список проектов
-    
-    Args:
-        developer_id: ID застройщика для фильтрации
-        skip: Количество пропускаемых записей
-        limit: Максимальное количество возвращаемых записей
-        db: Сессия базы данных
-    
-    Returns:
-        List[ProjectRead]: Список проектов
-    """
-    if developer_id:
-        return await crud_project.get_by_developer(db, developer_id)
-    return await crud_project.get_multi(db, skip=skip, limit=limit)
+    projects = await session.query(Project).all()
+    return [ProjectRead.from_orm(p) for p in projects]
 
-
-@router.post(
-    "/",
-    response_model=ProjectRead,
-    status_code=status.HTTP_201_CREATED,
-    summary="Создать новый проект",
-    description="Создает новый проект с указанными параметрами",
-    responses={
-        401: {"description": "Не авторизован"},
-        403: {"description": "Нет прав доступа"},
-        422: {"description": "Ошибка валидации"}
-    }
-)
-async def create_project(
-    project_in: ProjectCreate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
-) -> ProjectRead:
-    """
-    Создать новый проект
-    
-    Args:
-        project_in: Данные нового проекта
-        db: Сессия базы данных
-        current_user: Текущий пользователь
-    
-    Returns:
-        ProjectRead: Созданный проект
-    """
-    return await crud_project.create(db, obj_in=project_in)
-
-
-@router.get(
-    "/{project_id}",
-    response_model=ProjectRead,
-    summary="Получить проект",
-    description="Возвращает информацию о конкретном проекте",
-    responses={
-        404: {"description": "Проект не найден"}
-    }
-)
+@router.get("/{project_id}", response_model=ProjectRead,
+            summary="Получить проект",
+            description="Получение информации о конкретном проекте по его ID")
 async def get_project(
     project_id: int,
-    db: AsyncSession = Depends(get_async_session)
+    session: AsyncSession = Depends(get_async_session)
 ) -> ProjectRead:
-    """
-    Получить проект
-    
-    Args:
-        project_id: ID проекта
-        db: Сессия базы данных
-    
-    Returns:
-        ProjectRead: Информация о проекте
-    """
-    project = await crud_project.get(db, project_id)
+    project = await session.get(Project, project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Проект не найден"
         )
-    return project
+    return ProjectRead.from_orm(project)
 
+@router.post("/", response_model=ProjectRead,
+             summary="Создать проект",
+             description="Создание нового проекта (только для застройщиков)")
+async def create_project(
+    project_data: ProjectCreate,
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
+) -> ProjectRead:
+    if current_user_role != UserRole.DEVELOPER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут создавать проекты"
+        )
+    
+    project = Project(**project_data.dict())
+    session.add(project)
+    await session.commit()
+    await session.refresh(project)
+    return ProjectRead.from_orm(project)
 
-@router.put(
-    "/{project_id}",
-    response_model=ProjectRead,
-    summary="Обновить проект",
-    description="Обновляет информацию о существующем проекте",
-    responses={
-        401: {"description": "Не авторизован"},
-        403: {"description": "Нет прав доступа"},
-        404: {"description": "Проект не найден"},
-        422: {"description": "Ошибка валидации"}
-    }
-)
+@router.put("/{project_id}", response_model=ProjectRead,
+            summary="Обновить проект",
+            description="Обновление информации о проекте (только для застройщиков)")
 async def update_project(
     project_id: int,
-    project_in: ProjectUpdate,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
+    project_data: ProjectUpdate,
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
 ) -> ProjectRead:
-    """
-    Обновить проект
+    if current_user_role != UserRole.DEVELOPER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут обновлять проекты"
+        )
     
-    Args:
-        project_id: ID проекта
-        project_in: Обновленные данные проекта
-        db: Сессия базы данных
-        current_user: Текущий пользователь
-    
-    Returns:
-        ProjectRead: Обновленный проект
-    """
-    project = await crud_project.get(db, project_id)
+    project = await session.get(Project, project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Проект не найден"
         )
-    return await crud_project.update(db, db_obj=project, obj_in=project_in)
+    
+    for field, value in project_data.dict(exclude_unset=True).items():
+        setattr(project, field, value)
+    
+    await session.commit()
+    await session.refresh(project)
+    return ProjectRead.from_orm(project)
 
-
-@router.delete(
-    "/{project_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Удалить проект",
-    description="Удаляет существующий проект",
-    responses={
-        401: {"description": "Не авторизован"},
-        403: {"description": "Нет прав доступа"},
-        404: {"description": "Проект не найден"}
-    }
-)
+@router.delete("/{project_id}",
+               summary="Удалить проект",
+               description="Удаление проекта (только для застройщиков)")
 async def delete_project(
     project_id: int,
-    db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_user)
-) -> None:
-    """
-    Удалить проект
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
+):
+    if current_user_role != UserRole.DEVELOPER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут удалять проекты"
+        )
     
-    Args:
-        project_id: ID проекта
-        db: Сессия базы данных
-        current_user: Текущий пользователь
-    """
-    project = await crud_project.get(db, project_id)
+    project = await session.get(Project, project_id)
     if not project:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Проект не найден"
         )
-    await crud_project.remove(db, id=project_id) 
+    
+    await session.delete(project)
+    await session.commit()
+    return {"message": "Проект успешно удален"} 

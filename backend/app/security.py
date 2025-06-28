@@ -15,7 +15,6 @@ from app.schemas import TokenData
 # Настройки JWT
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30 минут
 REFRESH_TOKEN_EXPIRE_DAYS = 30    # 30 дней
-ALGORITHM = "HS256"
 
 # OAuth2 scheme для получения токена из заголовка
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_v1_str}/auth/token")
@@ -40,7 +39,7 @@ def create_token(data: Dict[str, Any], expires_delta: timedelta) -> str:
     to_encode = data.copy()
     expire = datetime.utcnow() + expires_delta
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -51,7 +50,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.utcnow() + timedelta(minutes=15)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
     return encoded_jwt
 
 
@@ -70,11 +69,11 @@ async def get_current_user(
     """Get current user from JWT token"""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
+        detail="Не удалось подтвердить учетные данные",
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, settings.secret_key, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
@@ -134,3 +133,8 @@ async def get_current_admin_user(
             detail="Not enough permissions"
         )
     return current_user 
+
+async def get_current_user_role(
+    current_user: User = Depends(get_current_user)
+) -> UserRole:
+    return current_user.role 

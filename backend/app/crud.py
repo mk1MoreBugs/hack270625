@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 import json
 from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import joinedload
-from uuid import UUID
 
 # Generic type для CRUD операций
 ModelType = TypeVar("ModelType")

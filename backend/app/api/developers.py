@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 from typing import List, Optional
-from uuid import UUID
 
 from app.database import get_async_session
 from app.models import Developer
@@ -53,13 +52,13 @@ async def get_developers(
 async def get_developer(
     *,
     session: Session = Depends(get_async_session),
-    developer_id: UUID
+    developer_id: int
 ):
     """
     Get a specific developer by ID.
     
     Parameters:
-    - developer_id: UUID of the developer
+    - developer_id: id of the developer
     
     Returns:
     - Developer details
@@ -124,14 +123,14 @@ async def update_developer(
     *,
     session: Session = Depends(get_async_session),
     _: dict = Depends(get_current_admin_user),
-    developer_id: UUID,
+    developer_id: int,
     developer: DeveloperUpdate
 ):
     """
     Update a developer.
     
     Parameters:
-    - developer_id: UUID of the developer to update
+    - developer_id: id of the developer to update
     - developer: Updated developer data
         
     Returns:
@@ -180,13 +179,13 @@ async def delete_developer(
     *,
     session: Session = Depends(get_async_session),
     _: dict = Depends(get_current_admin_user),
-    developer_id: UUID
+    developer_id: int
 ):
     """
     Delete a developer.
     
     Parameters:
-    - developer_id: UUID of the developer to delete
+    - developer_id: id of the developer to delete
         
     Returns:
     - Success message

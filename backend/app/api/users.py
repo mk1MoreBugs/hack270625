@@ -8,8 +8,8 @@ from app.crud import CRUDUser
 from app.security import get_current_active_user, get_current_admin
 
 router = APIRouter(
-    prefix="/api/v1/project/users",
-    tags=["projects"]
+    prefix="/users",
+    tags=["users"]
 )
 user_crud = CRUDUser(User)
 

@@ -7,7 +7,7 @@ import os
 import asyncio
 from sqlmodel import SQLModel
 from app.database import create_db_and_tables, AsyncSessionLocal, async_engine
-from app.mock_data import create_mock_data
+from app.mock_data import create_all_mock_data
 
 # Добавляем корневую директорию проекта в PYTHONPATH
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -23,8 +23,10 @@ async def init_db():
     
     # Создаем тестовые данные
     async with AsyncSessionLocal() as session:
-        await create_mock_data(session)
+        await create_all_mock_data(session)
 
 
 if __name__ == "__main__":
-    asyncio.run(init_db()) 
+    print("Инициализация базы данных...")
+    asyncio.run(init_db())
+    print("База данных успешно инициализирована!") 

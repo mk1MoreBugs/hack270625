@@ -1,7 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from uuid import UUID
 
 from app.database import get_async_session
 from app.crud import crud_property_address
@@ -16,7 +15,7 @@ router = APIRouter(prefix="/addresses", tags=["addresses"])
 async def get_addresses(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    property_id: Optional[UUID] = None,
+    property_id: Optional[int] = None,
     city: Optional[str] = None,
     db: AsyncSession = Depends(get_async_session)
 ):
@@ -42,7 +41,7 @@ async def get_addresses(
 
 @router.get("/{address_id}", response_model=PropertyAddressRead)
 async def get_address(
-    address_id: UUID,
+    address_id: int,
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -95,7 +94,7 @@ async def create_address(
 
 @router.put("/{address_id}", response_model=PropertyAddressRead)
 async def update_address(
-    address_id: UUID,
+    address_id: int,
     address_data: PropertyAddressUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
@@ -131,7 +130,7 @@ async def update_address(
 
 @router.delete("/{address_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_address(
-    address_id: UUID,
+    address_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
