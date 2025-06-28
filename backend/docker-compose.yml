@@ -1,14 +1,11 @@
-version: '3.8'
-
 services:
   # PostgreSQL база данных
   postgres:
     image: postgres:17.5-alpine
     environment:
-      POSTGRES_DB: app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
       PGDATA: /var/lib/postgresql/data
+    env_file:
+      - .env
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
@@ -37,14 +34,8 @@ services:
   # FastAPI приложение
   app:
     build: .
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     depends_on:
@@ -60,14 +51,8 @@ services:
   # Celery worker
   celery_worker:
     build: .
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,14 +65,8 @@ services:
   # Celery beat (планировщик задач)
   celery_beat:
     build: .
-    environment:
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      POSTGRES_DB: app
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+    env_file:
+      - .env
     depends_on:
       postgres:
         condition: service_healthy

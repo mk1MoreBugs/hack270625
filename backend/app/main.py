@@ -5,9 +5,9 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.config import settings
 from app.database import create_db_and_tables
 from app.api import (
-    apartments, developers, projects, dynamic_pricing,
-    users, bookings, promotions, analytics, map,
-    ai_matching, webhooks
+    properties, developers, projects, buildings, 
+    addresses, prices, media, dynamic_pricing, users, bookings, 
+    promotions, analytics, map, ai_matching, webhooks, auth
 )
 import secrets
 
@@ -71,17 +71,22 @@ app.add_middleware(
 )
 
 # Подключаем все роутеры
-app.include_router(users, prefix="/api/v1")
-app.include_router(developers, prefix="/api/v1")
-app.include_router(projects, prefix="/api/v1")
-app.include_router(apartments, prefix="/api/v1")
-app.include_router(bookings, prefix="/api/v1")
-app.include_router(promotions, prefix="/api/v1")
-app.include_router(analytics, prefix="/api/v1")
-app.include_router(map, prefix="/api/v1")
-app.include_router(ai_matching, prefix="/api/v1")
-app.include_router(dynamic_pricing, prefix="/api/v1")
-app.include_router(webhooks, prefix="/api/v1")
+app.include_router(auth.router, prefix="/api/v1")
+app.include_router(users.router, prefix="/api/v1")
+app.include_router(developers.router, prefix="/api/v1")
+app.include_router(projects.router, prefix="/api/v1")
+app.include_router(buildings.router, prefix="/api/v1")
+app.include_router(properties.router, prefix="/api/v1")
+app.include_router(addresses.router, prefix="/api/v1")
+app.include_router(prices.router, prefix="/api/v1")
+app.include_router(media.router, prefix="/api/v1")
+app.include_router(bookings.router, prefix="/api/v1")
+app.include_router(promotions.router, prefix="/api/v1")
+app.include_router(analytics.router, prefix="/api/v1")
+app.include_router(dynamic_pricing.router, prefix="/api/v1")
+app.include_router(ai_matching.router, prefix="/api/v1")
+app.include_router(map.router, prefix="/api/v1")
+app.include_router(webhooks.router, prefix="/api/v1")
 
 
 @app.get("/")
@@ -129,3 +134,4 @@ async def get_redoc_html(credentials: HTTPBasicCredentials = Depends(verify_docs
 async def get_openapi_json(credentials: HTTPBasicCredentials = Depends(verify_docs_access)):
     """Защищенный эндпоинт для OpenAPI JSON"""
     return app.openapi()
+ 
