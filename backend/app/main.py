@@ -4,7 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.config import settings
 from app.database import create_db_and_tables
-from app.api import apartments, dynamic_pricing, developers, projects
+from app.api import (
+    apartments, developers, projects, dynamic_pricing,
+    users, bookings, promotions, analytics, map,
+    ai_matching, webhooks
+)
 import secrets
 
 
@@ -48,43 +52,10 @@ async def lifespan(app: FastAPI):
 
 # Создаем FastAPI приложение
 app = FastAPI(
-    title=settings.project_name,
-    version=settings.version,
+    title="Недвижимость 4.0 API",
+    description="API для платформы динамического ценообразования в недвижимости",
+    version="1.0.0",
     lifespan=lifespan,
-    description="""
-    🏠 **Недвижимость 4.0** - Платформа для динамического ценообразования недвижимости
-    
-    ## Возможности
-    
-    ### Для покупателей:
-    - 📍 Цифровая карта России с новостройками
-    - 🏢 Каталог проектов с полной информацией
-    - 🤖 ИИ-подбор квартир
-    - 💰 Динамическое ценообразование
-    - 🎁 Акции и скидки
-    - 📅 Онлайн-бронирование
-    
-    ### Для застройщиков:
-    - 🏢 Личный кабинет с CRM
-    - 🔗 Интеграция с внешними CRM
-    - 📊 Аналитика спроса
-    - 🔄 Автоматическое обновление остатков
-    
-    ### Для ассоциации застройщиков:
-    - ✅ Модерация контента
-    - 🛡️ Контроль сделок
-    - 📈 Аналитика рынка
-    
-    ## Динамическое ценообразование
-    
-    Алгоритм автоматически изменяет цены квартир на основе:
-    - 👀 Просмотров за 24 часа
-    - 👤 Лидов за 24 часа  
-    - 📅 Бронирований за 24 часа
-    - 📊 Дней на сайте
-    
-    Цены изменяются в пределах ±7% от базовой стоимости.
-    """,
     openapi_url=f"{settings.api_v1_str}/openapi.json",
     #docs_url=None,  # Отключаем стандартные эндпоинты
     #redoc_url=None  # Отключаем стандартные эндпоинты
@@ -99,22 +70,28 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем роутеры
-app.include_router(apartments.router, prefix=settings.api_v1_str)
-app.include_router(dynamic_pricing.router, prefix=settings.api_v1_str)
-app.include_router(developers.router, prefix=settings.api_v1_str)
-app.include_router(projects.router, prefix=settings.api_v1_str)
+# Подключаем все роутеры
+app.include_router(users, prefix="/api/v1")
+app.include_router(developers, prefix="/api/v1")
+app.include_router(projects, prefix="/api/v1")
+app.include_router(apartments, prefix="/api/v1")
+app.include_router(bookings, prefix="/api/v1")
+app.include_router(promotions, prefix="/api/v1")
+app.include_router(analytics, prefix="/api/v1")
+app.include_router(map, prefix="/api/v1")
+app.include_router(ai_matching, prefix="/api/v1")
+app.include_router(dynamic_pricing, prefix="/api/v1")
+app.include_router(webhooks, prefix="/api/v1")
 
 
 @app.get("/")
 async def root():
     """Корневой эндпоинт"""
     return {
-        "message": "🏠 Добро пожаловать в Недвижимость 4.0!",
-        "version": settings.version,
-        "docs": "/docs",
-        "redoc": "/redoc",
-        "api_v1": f"{settings.api_v1_str}/"
+        "name": "Недвижимость 4.0 API",
+        "version": "1.0.0",
+        "docs_url": "/docs",
+        "redoc_url": "/redoc"
     }
 
 

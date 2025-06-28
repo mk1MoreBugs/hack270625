@@ -1,9 +1,11 @@
 from logging.config import fileConfig
+
 from sqlalchemy import engine_from_config
 from sqlalchemy import pool
+
 from alembic import context
-from app.config import settings
-from app.models import SQLModel
+
+from app.core.config import settings
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -16,6 +18,7 @@ if config.config_file_name is not None:
 
 # add your model's MetaData object here
 # for 'autogenerate' support
+from app.models import *
 target_metadata = SQLModel.metadata
 
 # other values from the config, defined by the needs of env.py,
@@ -25,7 +28,13 @@ target_metadata = SQLModel.metadata
 
 
 def get_url():
-    return settings.database_url
+    return "postgresql+asyncpg://{}:{}@{}:{}/{}".format(
+        os.getenv("DB_USER", "real_estate_user"),
+        os.getenv("DB_PASS", "password"),
+        os.getenv("DB_HOST", "db"),
+        os.getenv("DB_PORT", "5432"),
+        os.getenv("DB_NAME", "real_estate_db"),
+    )
 
 
 def run_migrations_offline() -> None:
@@ -79,4 +88,4 @@ def run_migrations_online() -> None:
 if context.is_offline_mode():
     run_migrations_offline()
 else:
-    run_migrations_online() 
+    run_migrations_online()

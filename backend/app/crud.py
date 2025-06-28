@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlmodel import select, update, delete
-from typing import List, Optional, TypeVar, Generic, Type
+from typing import List, Optional, TypeVar, Generic, Type, Dict, Any
 from app.models import (
     User, Developer, Project, Building, Apartment, 
     ApartmentStats, PriceHistory, ViewsLog, Booking,
@@ -10,6 +10,7 @@ from app.models import (
 )
 from datetime import datetime, timedelta
 import json
+from sqlalchemy import and_, or_, func
 
 # Generic type для CRUD операций
 ModelType = TypeVar("ModelType")
@@ -73,15 +74,20 @@ class CRUDBase(Generic[ModelType]):
 class CRUDUser(CRUDBase[User]):
     """CRUD операции для пользователей"""
     
-    async def get_by_email(self, db: AsyncSession, email: str) -> Optional[User]:
+    async def get_by_email(self, db: AsyncSession, email: str):
         """Получить пользователя по email"""
-        result = await db.execute(select(User).where(User.email == email))
-        return result.first()
+        result = await db.execute(select(User).filter(User.email == email))
+        return result.scalar_one_or_none()
     
-    async def get_by_role(self, db: AsyncSession, role: UserRole) -> List[User]:
+    async def get_by_role(self, db: AsyncSession, role: UserRole):
         """Получить пользователей по роли"""
-        result = await db.execute(select(User).where(User.role == role))
-        return result.all()
+        result = await db.execute(select(User).filter(User.role == role))
+        return result.scalars().all()
+
+    async def get_multi(self, db: AsyncSession, *, skip: int = 0, limit: int = 100):
+        """Получить список пользователей"""
+        result = await db.execute(select(User).offset(skip).limit(limit))
+        return result.scalars().all()
 
 
 class CRUDDeveloper(CRUDBase[Developer]):
@@ -214,6 +220,53 @@ class CRUDApartmentStats(CRUDBase[ApartmentStats]):
         await db.refresh(stats)
         return stats
 
+    async def get_market_stats(
+        self,
+        db: AsyncSession,
+        start_date: datetime,
+        city: Optional[str] = None,
+        region_code: Optional[str] = None
+    ):
+        """Получить статистику рынка"""
+        query = select(
+            func.count(ApartmentStats.id).label("total_views"),
+            func.avg(ApartmentStats.views_24h).label("avg_views"),
+            func.avg(ApartmentStats.bookings_24h).label("avg_bookings")
+        )
+        
+        if city or region_code:
+            query = query.join(Apartment).join(Building).join(Project)
+            if city:
+                query = query.filter(Project.city == city)
+            if region_code:
+                query = query.filter(Project.region_code == region_code)
+        
+        result = await db.execute(query)
+        return result.mappings().one()
+
+    async def get_demand_clusters(
+        self,
+        db: AsyncSession,
+        project_id: Optional[int] = None,
+        rooms: Optional[int] = None
+    ):
+        """Получить кластеры спроса"""
+        query = select(
+            Apartment.rooms,
+            func.count(ApartmentStats.id).label("total_apartments"),
+            func.avg(ApartmentStats.views_24h).label("avg_views"),
+            func.avg(ApartmentStats.bookings_24h).label("avg_bookings")
+        ).join(ApartmentStats)
+        
+        if project_id:
+            query = query.join(Building).filter(Building.project_id == project_id)
+        if rooms:
+            query = query.filter(Apartment.rooms == rooms)
+        
+        query = query.group_by(Apartment.rooms)
+        result = await db.execute(query)
+        return result.mappings().all()
+
 
 class CRUDPriceHistory(CRUDBase[PriceHistory]):
     """CRUD операции для истории цен"""
@@ -252,22 +305,25 @@ class CRUDViewsLog(CRUDBase[ViewsLog]):
     """CRUD операции для логов просмотров"""
     
     async def get_by_apartment(
-        self, 
-        db: AsyncSession, 
+        self,
+        db: AsyncSession,
         apartment_id: int,
-        hours: int = 24
-    ) -> List[ViewsLog]:
-        """Получить логи просмотров квартиры за период"""
-        since = datetime.utcnow() - timedelta(hours=hours)
-        result = await db.execute(
-            select(ViewsLog)
-            .where(
-                ViewsLog.apartment_id == apartment_id,
-                ViewsLog.occurred_at >= since
-            )
-            .order_by(ViewsLog.occurred_at.desc())
-        )
-        return result.all()
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        skip: int = 0,
+        limit: int = 100
+    ):
+        """Получить историю просмотров квартиры"""
+        query = select(ViewsLog).filter(ViewsLog.apartment_id == apartment_id)
+        
+        if start_date:
+            query = query.filter(ViewsLog.occurred_at >= start_date)
+        if end_date:
+            query = query.filter(ViewsLog.occurred_at <= end_date)
+        
+        query = query.offset(skip).limit(limit)
+        result = await db.execute(query)
+        return result.scalars().all()
     
     async def get_views_count(
         self, 
@@ -347,6 +403,30 @@ class CRUDDynamicPricingConfig(CRUDBase[DynamicPricingConfig]):
         return result.first()
 
 
+class CRUDPromotion(CRUDBase[Promotion]):
+    async def get_active(self, db: AsyncSession, current_time: datetime):
+        """Получить активные акции"""
+        result = await db.execute(
+            select(Promotion).filter(
+                and_(
+                    Promotion.starts_at <= current_time,
+                    Promotion.ends_at > current_time
+                )
+            )
+        )
+        return result.scalars().all()
+
+
+class CRUDWebhook(CRUDBase[WebhookInbox]):
+    async def get_unprocessed(self, db: AsyncSession, source: Optional[str] = None):
+        """Получить необработанные вебхуки"""
+        query = select(WebhookInbox).filter(WebhookInbox.processed == False)
+        if source:
+            query = query.filter(WebhookInbox.source == source)
+        result = await db.execute(query)
+        return result.scalars().all()
+
+
 # Создаем экземпляры CRUD классов
 user = CRUDUser(User)
 developer = CRUDDeveloper(Developer)
@@ -357,4 +437,6 @@ apartment_stats = CRUDApartmentStats(ApartmentStats)
 price_history = CRUDPriceHistory(PriceHistory)
 views_log = CRUDViewsLog(ViewsLog)
 booking = CRUDBooking(Booking)
-dynamic_pricing_config = CRUDDynamicPricingConfig(DynamicPricingConfig) 
+dynamic_pricing_config = CRUDDynamicPricingConfig(DynamicPricingConfig)
+promotion = CRUDPromotion(Promotion)
+webhook = CRUDWebhook(WebhookInbox) 
