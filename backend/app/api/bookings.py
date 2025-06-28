@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List
 from app.database import get_async_session
-from app.models import Booking, Apartment, BookingStatus
+from app.models import Booking, Apartment, BookingStatus, User
 from app.schemas import BookingResponse, BookingCreate, BookingUpdate
 from app.crud import CRUDBooking, CRUDApartment
+from app.security import get_current_active_user
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
@@ -12,12 +13,68 @@ booking_crud = CRUDBooking(Booking)
 apartment_crud = CRUDApartment(Apartment)
 
 
-@router.post("", response_model=BookingResponse)
+@router.post("", response_model=BookingResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Квартира не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Apartment not found"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Квартира уже забронирована",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Apartment is already booked"
+                }
+            }
+        }
+    }
+})
 async def create_booking(
     booking_data: BookingCreate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Создать новое бронирование"""
+    """
+    Создать новое бронирование
+    
+    Args:
+        booking_data: Данные для создания бронирования
+        
+    Returns:
+        BookingResponse: Созданное бронирование
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Квартира не найдена
+        400: Bad Request - Квартира уже забронирована
+    """
     # Проверяем существование квартиры
     apartment = await apartment_crud.get(db, booking_data.apartment_id)
     if not apartment:
@@ -66,13 +123,70 @@ async def get_booking(
     return db_booking
 
 
-@router.put("/{booking_id}", response_model=BookingResponse)
+@router.put("/{booking_id}", response_model=BookingResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Бронирование не найдено",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Booking not found"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    }
+})
 async def update_booking(
     booking_id: int,
     booking_data: BookingUpdate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Обновить бронирование"""
+    """
+    Обновить бронирование
+    
+    Args:
+        booking_id: ID бронирования
+        booking_data: Данные для обновления
+        
+    Returns:
+        BookingResponse: Обновленное бронирование
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Бронирование не найдено
+        400: Bad Request - Некорректные данные
+    """
     db_booking = await booking_crud.get(db, booking_id)
     if not db_booking:
         raise HTTPException(
@@ -82,12 +196,67 @@ async def update_booking(
     return await booking_crud.update(db, db_booking, booking_data.dict(exclude_unset=True))
 
 
-@router.delete("/{booking_id}")
+@router.delete("/{booking_id}", responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Бронирование не найдено",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Booking not found"
+                }
+            }
+        }
+    },
+    200: {
+        "description": "Бронирование успешно удалено",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Booking deleted"
+                }
+            }
+        }
+    }
+})
 async def delete_booking(
     booking_id: int,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_active_user)
 ):
-    """Удалить бронирование"""
+    """
+    Удалить бронирование
+    
+    Args:
+        booking_id: ID бронирования
+        
+    Returns:
+        dict: Сообщение об успешном удалении
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Бронирование не найдено
+    """
     if not await booking_crud.delete(db, booking_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

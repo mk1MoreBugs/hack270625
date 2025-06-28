@@ -73,7 +73,7 @@ class DynamicPricingService:
             demand = await self.calculate_demand_score(apt)
             if demand > 0:
                 demand_scores.append(demand)
-        
+        а
         if not demand_scores:
             return 1.0
         

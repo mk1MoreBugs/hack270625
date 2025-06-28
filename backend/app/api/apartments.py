@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from app.database import get_async_session
-from app.models import Apartment, ViewsLog, ViewEvent, ApartmentStatus
+from app.models import Apartment, ViewsLog, ViewEvent, ApartmentStatus, User
 from app.schemas import (
     ApartmentResponse, ApartmentCreate, ApartmentUpdate,
     ViewsLogCreate, ViewsLogResponse, ApartmentSearchParams,
@@ -10,7 +10,7 @@ from app.schemas import (
 )
 from app.services.stats_aggregator import StatsAggregatorService
 from app.crud import CRUDApartment, CRUDStats, CRUDViewsLog
-from app.database import get_async_session
+from app.security import get_current_active_user, get_current_business
 from datetime import datetime
 
 apartment = CRUDApartment(Apartment)
@@ -63,22 +63,124 @@ async def get_apartment(
     return db_apartment
 
 
-@router.post("", response_model=ApartmentResponse)
+@router.post("", response_model=ApartmentResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    }
+})
 async def create_apartment(
     apartment_data: ApartmentCreate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Создать новую квартиру"""
+    """
+    Создать новую квартиру
+    
+    Args:
+        apartment_data: Данные для создания квартиры
+        
+    Returns:
+        ApartmentResponse: Созданная квартира
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        400: Bad Request - Некорректные данные
+    """
     return await apartment.create(db, apartment_data.dict())
 
 
-@router.put("/{apartment_id}", response_model=ApartmentResponse)
+@router.put("/{apartment_id}", response_model=ApartmentResponse, responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Квартира не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Apartment not found"
+                }
+            }
+        }
+    },
+    400: {
+        "description": "Некорректные данные",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Validation error"
+                }
+            }
+        }
+    }
+})
 async def update_apartment(
     apartment_id: int,
     apartment_data: ApartmentUpdate,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Обновить квартиру"""
+    """
+    Обновить квартиру
+    
+    Args:
+        apartment_id: ID квартиры
+        apartment_data: Данные для обновления
+        
+    Returns:
+        ApartmentResponse: Обновленная квартира
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Квартира не найдена
+        400: Bad Request - Некорректные данные
+    """
     db_apartment = await apartment.get(db, apartment_id)
     if not db_apartment:
         raise HTTPException(
@@ -88,12 +190,67 @@ async def update_apartment(
     return await apartment.update(db, db_apartment, apartment_data.dict(exclude_unset=True))
 
 
-@router.delete("/{apartment_id}")
+@router.delete("/{apartment_id}", responses={
+    401: {
+        "description": "Не авторизован",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Could not validate credentials"
+                }
+            }
+        }
+    },
+    403: {
+        "description": "Недостаточно прав",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Operation not permitted"
+                }
+            }
+        }
+    },
+    404: {
+        "description": "Квартира не найдена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "detail": "Apartment not found"
+                }
+            }
+        }
+    },
+    200: {
+        "description": "Квартира успешно удалена",
+        "content": {
+            "application/json": {
+                "example": {
+                    "message": "Apartment deleted"
+                }
+            }
+        }
+    }
+})
 async def delete_apartment(
     apartment_id: int,
-    db: AsyncSession = Depends(get_async_session)
+    db: AsyncSession = Depends(get_async_session),
+    current_user: User = Depends(get_current_business)
 ):
-    """Удалить квартиру"""
+    """
+    Удалить квартиру
+    
+    Args:
+        apartment_id: ID квартиры
+        
+    Returns:
+        dict: Сообщение об успешном удалении
+        
+    Raises:
+        401: Unauthorized - Не авторизован
+        403: Forbidden - Недостаточно прав
+        404: Not Found - Квартира не найдена
+    """
     if not await apartment.delete(db, apartment_id):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
