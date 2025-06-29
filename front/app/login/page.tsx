@@ -1,10 +1,17 @@
+"use client"
+
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
 
 export default function LoginPage() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const callbackUrl = searchParams.get("callbackUrl")
+
   return (
     <div className="flex items-center justify-center min-h-[calc(100vh-400px)] bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
       <Card className="w-full max-w-md">
@@ -13,7 +20,15 @@ export default function LoginPage() {
           <CardDescription>Введите данные для входа или выберите роль</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="space-y-4">
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault()
+              // Здесь будет логика аутентификации
+              // После успешного входа перенаправляем пользователя
+              router.push(callbackUrl || "/profile")
+            }}
+          >
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input id="email" type="email" placeholder="example@mail.com" required />
@@ -23,9 +38,9 @@ export default function LoginPage() {
               <Input id="password" type="password" required />
             </div>
             <div className="flex flex-col space-y-2 pt-2">
-              <Link href="/dashboard" passHref>
-                <Button className="w-full">Войти</Button>
-              </Link>
+              <Button type="submit" className="w-full">
+                Войти
+              </Button>
               <Button variant="secondary" className="w-full">
                 Зарегистрироваться
               </Button>

@@ -4,7 +4,7 @@ import { useState } from "react"
 import { Star, Home, Users, TrendingUp } from "lucide-react"
 import { HeroSection } from "@/components/home/HeroSection"
 import { StatsSection } from "@/components/home/StatsSection"
-import { FeaturedProjects } from "@/components/home/FeaturedProjects"
+import { FeaturedApartments } from "@/components/home/FeaturedApartments"
 import { MapPlaceholder } from "@/components/home/MapPlaceholder"
 import { BenefitsSection } from "@/components/home/BenefitsSection"
 
@@ -71,7 +71,7 @@ export default function HomePage() {
       <StatsSection />
 
       {/* Featured Projects */}
-      <FeaturedProjects />
+      <FeaturedApartments />
 
       {/* Interactive Map Section */}
       <MapPlaceholder />

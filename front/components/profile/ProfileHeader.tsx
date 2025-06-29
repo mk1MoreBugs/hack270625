@@ -1,29 +1,25 @@
 "use client"
 
 import Link from "next/link"
-import { Home } from "lucide-react"
+import { Home, Bell } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { AiAssistantLink } from "@/components/search/AiAssistantLink"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 
-export function Header() {
+export function ProfileHeader() {
   const pathname = usePathname()
-  const isDashboard = pathname.startsWith("/dashboard-") || pathname === "/profile"
 
   const navLinks = [
     { href: "/", label: "Главная" },
+    { href: "/profile", label: "Панель управления" },
     { href: "/catalog", label: "Каталог" },
     { href: "/map", label: "Карта" },
     { href: "/about", label: "О нас" },
   ]
 
-  if (isDashboard) {
-    return null
-  }
-
   return (
-    <header className="border-b bg-white/80 backdrop-blur-md sticky top-0 z-50">
+    <header className="border-b bg-white sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
           <Link href="/" className="flex items-center space-x-2">
@@ -49,10 +45,13 @@ export function Header() {
           </nav>
 
           <div className="flex items-center space-x-4">
-            <AiAssistantLink />
-            <Link href="/login">
-              <Button>Войти</Button>
-            </Link>
+            <Button variant="ghost" size="icon">
+              <Bell className="w-5 h-5" />
+            </Button>
+            <Avatar>
+              <AvatarImage src="/placeholder.svg?height=32&width=32" />
+              <AvatarFallback>ИП</AvatarFallback>
+            </Avatar>
           </div>
         </div>
       </div>

@@ -59,7 +59,7 @@ export function HeroSection() {
             </div>
             <Select value={selectedRegion} onValueChange={setSelectedRegion}>
               <SelectTrigger className="h-12">
-                <SelectValue placeholder="Регион" />
+                <SelectValue placeholder="Город" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="Москва">Москва</SelectItem>

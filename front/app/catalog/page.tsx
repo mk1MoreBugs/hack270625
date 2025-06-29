@@ -289,16 +289,16 @@ function FilterContent({
         </div>
       </div>
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Регион</label>
+        <label className="block text-sm font-medium text-gray-700 mb-3">Город</label>
         <Select value={selectedRegion} onValueChange={setSelectedRegion}>
           <SelectTrigger>
-            <SelectValue placeholder="Выберите регион" />
+            <SelectValue placeholder="Выберите город" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все регионы</SelectItem>
-            {filterOptions.regions.map((region) => (
-              <SelectItem key={region} value={region}>
-                {region}
+            <SelectItem value="all">Все города</SelectItem>
+            {filterOptions.cities.map((city) => (
+              <SelectItem key={city} value={city}>
+                {city}
               </SelectItem>
             ))}
           </SelectContent>

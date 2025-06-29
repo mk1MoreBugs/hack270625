@@ -11,21 +11,20 @@ import {
   Gavel,
   BarChart2,
   Eye,
-  TrendingUp,
   Star,
 } from "lucide-react"
-import type { Project, Lead, StatCard, FilterOptions, UserRole } from "./types"
+import type { Project, Lead, StatCard, FilterOptions, UserRole, Apartment, Review } from "./types"
 
-/* ---------------------------  ГЛАВНАЯ СТАТИСТИКА  --------------------------- */
+/* ---------------- دستیار صوتی هوشمن  --------------------------- */
 export const homeStats = [
-  { label: "Проектов в базе", value: "150+", icon: Home },
-  { label: "Застройщиков", value: "30+", icon: Users },
-  { label: "Сделок в месяц", value: "500+", icon: TrendingUp },
-  { label: "Экономия на комиссии", value: "до 5%", icon: Star },
+  { label: "Проверенных застройщиков", value: "16", icon: Building },
+  { label: "Активных проектов", value: "500+", icon: Home },
+  { label: "Довольных покупателей", value: "12 000+", icon: Users },
+  { label: "Экономия на комиссии", value: "до 6%", icon: Star },
 ] satisfies { label: string; value: string; icon: React.ComponentType<any> }[]
 
 export const filterOptions: FilterOptions = {
-  regions: ["Краснодар", "Сочи", "Новороссийск", "Анапа"],
+  cities: ["Краснодар", "Сочи", "Новороссийск", "Анапа"],
   classes: ["Эконом", "Комфорт", "Бизнес", "Элит"],
   completion: ["Сдан", "2024", "2025", "2026"],
   features: ["Паркинг", "Детская площадка", "Закрытая территория", "Рядом с парком"],
@@ -122,6 +121,39 @@ export const projectsData: Project[] = [
   },
 ]
 
+export const recommendedApartmentsData: Apartment[] = [
+  {
+    id: "a1",
+    name: "2-комнатная",
+    project: "ЖК Солнечный Берег",
+    area: 65,
+    price: "5.2 млн ₽",
+    image: "/placeholder.svg?height=300&width=400",
+    promotion: "Ипотека 0.1%",
+    tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+  },
+  {
+    id: "a2",
+    name: "Студия",
+    project: "ЖК Зеленый Квартал",
+    area: 28,
+    price: "6.2 млн ₽",
+    image: "/placeholder.svg?height=300&width=400",
+    promotion: "Скидка 10%",
+    tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+  },
+  {
+    id: "a3",
+    name: "1-комнатная",
+    project: "ЖК Центральный",
+    area: 42,
+    price: "5.5 млн ₽",
+    image: "/placeholder.svg?height=300&width=400",
+    promotion: "Паркинг в подарок",
+    tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+  },
+]
+
 export const leadsData: Lead[] = [
   {
     id: "1",
@@ -155,26 +187,21 @@ export const leadsData: Lead[] = [
   },
 ]
 
-export const reviewsData = [
+export const reviewsData: Review[] = [
   {
     id: "1",
     author: "Алексей Смирнов",
-    role: "Покупатель",
+    rating: 5,
+    date: "2024-07-15",
     text: "Отличная платформа! Нашли квартиру мечты без риелторов и скрытых комиссий. Все прозрачно и понятно. Рекомендую!",
     avatar: "/placeholder.svg?height=48&width=48",
   },
   {
     id: "2",
-    name: "Ольга Кузнецова",
-    role: "Покупатель",
+    author: "Ольга Кузнецова",
+    rating: 5,
+    date: "2024-07-12",
     text: "ИИ-подбор — это просто магия! Сэкономила кучу времени, система предложила варианты, о которых я даже не думала. Спасибо!",
-    avatar: "/placeholder.svg?height=48&width=48",
-  },
-  {
-    id: "3",
-    name: "Виктор Петров",
-    role: "Представитель застройщика",
-    text: "Перевели все наши проекты на эту платформу. Результат — рост прямых продаж на 30% и значительная экономия на рекламе.",
     avatar: "/placeholder.svg?height=48&width=48",
   },
 ]

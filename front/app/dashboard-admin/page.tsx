@@ -10,14 +10,9 @@ import { projectsData } from "@/lib/data"
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader"
 
 export default function AdminDashboardPage() {
-  const adminLinks = [
-    { href: "/dashboard-admin", label: "Панель управления", active: true },
-    { href: "/catalog", label: "Каталог" },
-  ]
-
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader links={adminLinks} userName="АД" />
+      <DashboardHeader links={[]} userName="АД" isLogoLink={false} />
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Панель администратора</h1>
         <Tabs defaultValue="developers" className="space-y-6">

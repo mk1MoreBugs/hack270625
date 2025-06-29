@@ -1,16 +1,16 @@
 "use client"
 
-import { MapPin, Star, Share2, Heart, Phone, Mail } from "lucide-react"
-import Image from "next/image"
-import Link from "next/link"
-import { projectsData, reviewsData } from "@/lib/data"
-import { Badge } from "@/components/ui/badge"
+import { useState } from "react"
+import { Star, MapPin, Phone, Mail, Share2, Heart, Eye, Home, Square, ChefHat } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Progress } from "@/components/ui/progress"
-import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel"
+import { Badge } from "@/components/ui/badge"
+import Image from "next/image"
+import Link from "next/link"
+import { projectsData } from "@/lib/data"
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -20,15 +20,129 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
 
-export default function ProjectPage({ params }: { params: { id: string } }) {
-  const project = projectsData.find((p) => p.id === "1") // Static for now
+// Функция для получения данных квартиры по ID
+const getApartmentById = (apartmentId: string) => {
+  // Извлекаем projectId из apartmentId (формат: projectId-apartmentId)
+  const projectId = apartmentId.split("-")[0]
+  const project = projectsData.find((p) => p.id === projectId)
 
-  if (!project) {
-    return <div>Проект не найден</div>
+  if (!project) return null
+
+  // Генерируем данные квартиры на основе ID в соответствии с новой структурой
+  const apartmentData = {
+    "1-a1": {
+      number: "101",
+      floor: 5,
+      rooms: 0,
+      area_total: 28.5,
+      area_living: 18,
+      area_kitchen: 10.5,
+      base_price: 4200000,
+      current_price: 4200000,
+      balcony: true,
+      loggia: false,
+      parking: false,
+      layout_image_url: null,
+      building_id: 1,
+      status: "available" as const,
+      name: "Студия",
+      description:
+        "Уютная студия с современной планировкой и панорамными окнами. Идеально подходит для молодых специалистов или студентов.",
+      features: ["Балкон", "Кондиционер", "Встроенная кухня", "Высокие потолки"],
+    },
+    "1-a2": {
+      number: "205",
+      floor: 8,
+      rooms: 1,
+      area_total: 42.3,
+      area_living: 18.5,
+      area_kitchen: 12.8,
+      base_price: 5800000,
+      current_price: 5800000,
+      balcony: true,
+      loggia: false,
+      parking: true,
+      layout_image_url: null,
+      building_id: 1,
+      status: "available" as const,
+      name: "1-комнатная",
+      description: "Просторная однокомнатная квартира с отдельной кухней и большой гостиной. Отличный выбор для пары.",
+      features: ["Балкон", "Гардеробная", "Кондиционер", "Встроенная техника", "Паркинг"],
+    },
+    "1-a3": {
+      number: "312",
+      floor: 12,
+      rooms: 2,
+      area_total: 65.7,
+      area_living: 35.2,
+      area_kitchen: 15.5,
+      base_price: 7500000,
+      current_price: 7500000,
+      balcony: false,
+      loggia: true,
+      parking: true,
+      layout_image_url: null,
+      building_id: 1,
+      status: "available" as const,
+      name: "2-комнатная",
+      description: "Двухкомнатная квартира с изолированными комнатами и просторной кухней-гостиной.",
+      features: ["Лоджия", "Гардеробная", "Кондиционер", "Кладовая", "Встроенная техника", "Паркинг"],
+    },
   }
 
+  const apartmentInfo = apartmentData[apartmentId as keyof typeof apartmentData] || apartmentData["1-a1"]
+
+  return {
+    id: apartmentId,
+    ...apartmentInfo,
+    project: project.name,
+    projectId: projectId,
+    developer: project.developer,
+    location: project.location,
+    completion: project.completion,
+    class: project.class,
+    rating: project.rating || 4.8,
+    image: "/placeholder.svg?height=600&width=800",
+    gallery: [
+      "/placeholder.svg?height=600&width=800",
+      "/placeholder.svg?height=600&width=800",
+      "/placeholder.svg?height=600&width=800",
+      "/placeholder.svg?height=600&width=800",
+    ],
+    created_at: "2025-06-28T06:32:34.547929",
+    updated_at: "2025-06-28T06:32:34.547931",
+  }
+}
+
+export default function ApartmentPage({ params }: { params: { id: string } }) {
+  const [selectedImage, setSelectedImage] = useState(0)
+  const apartment = getApartmentById(params.id)
+
+  if (!apartment) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Квартира не найдена</h1>
+          <Link href="/catalog">
+            <Button>Вернуться к каталогу</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  const formatPrice = (price: number) => {
+    return new Intl.NumberFormat("ru-RU", {
+      style: "currency",
+      currency: "RUB",
+      maximumFractionDigits: 0,
+    }).format(price)
+  }
+
+  const pricePerSqm = Math.round(apartment.current_price! / apartment.area_total!)
+
   return (
-    <div className="bg-gray-50">
+    <div className="min-h-screen bg-gray-50">
       <div className="container mx-auto px-4 py-8">
         <div className="mb-6 flex justify-between items-center">
           <Breadcrumb>
@@ -46,7 +160,13 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
               </BreadcrumbItem>
               <BreadcrumbSeparator />
               <BreadcrumbItem>
-                <BreadcrumbPage>{project.name}</BreadcrumbPage>
+                <BreadcrumbLink asChild>
+                  <Link href={`/real_estates/${apartment.projectId}`}>{apartment.project}</Link>
+                </BreadcrumbLink>
+              </BreadcrumbItem>
+              <BreadcrumbSeparator />
+              <BreadcrumbItem>
+                <BreadcrumbPage>Квартира №{apartment.number}</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
@@ -61,156 +181,206 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2">
-            <Card className="overflow-hidden">
+          <div className="lg:col-span-2 space-y-8">
+            {/* Gallery */}
+            <Card>
               <CardContent className="p-0">
-                <Carousel>
-                  <CarouselContent>
-                    {project.gallery?.map((img, index) => (
-                      <CarouselItem key={index}>
+                <div className="relative">
+                  <Image
+                    src={apartment.gallery[selectedImage] || "/placeholder.svg"}
+                    alt={`Квартира №${apartment.number} - изображение ${selectedImage + 1}`}
+                    width={800}
+                    height={600}
+                    className="w-full h-96 object-cover rounded-t-lg"
+                  />
+                  <Button className="absolute top-4 right-4" variant="secondary">
+                    <Eye className="w-4 h-4 mr-2" />
+                    3D-тур
+                  </Button>
+                  <Badge
+                    className={`absolute top-4 left-4 ${
+                      apartment.status === "available"
+                        ? "bg-green-500 hover:bg-green-600"
+                        : apartment.status === "reserved"
+                          ? "bg-yellow-500 hover:bg-yellow-600"
+                          : "bg-red-500 hover:bg-red-600"
+                    }`}
+                  >
+                    {apartment.status === "available"
+                      ? "Доступна"
+                      : apartment.status === "reserved"
+                        ? "Забронирована"
+                        : "Продана"}
+                  </Badge>
+                </div>
+                <div className="p-4">
+                  <div className="flex space-x-2 overflow-x-auto">
+                    {apartment.gallery.map((image, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setSelectedImage(index)}
+                        className={`flex-shrink-0 w-20 h-16 rounded-lg overflow-hidden border-2 ${
+                          selectedImage === index ? "border-blue-500" : "border-gray-200"
+                        }`}
+                      >
                         <Image
-                          src={img || "/placeholder.svg"}
-                          alt={`${project.name} - изображение ${index + 1}`}
-                          width={800}
-                          height={500}
-                          className="w-full h-auto object-cover"
+                          src={image || "/placeholder.svg"}
+                          alt={`Gallery ${index + 1}`}
+                          width={80}
+                          height={64}
+                          className="w-full h-full object-cover"
                         />
-                      </CarouselItem>
-                    )) || (
-                      <CarouselItem>
-                        <Image
-                          src={project.image || "/placeholder.svg"}
-                          alt={project.name}
-                          width={800}
-                          height={500}
-                          className="w-full h-auto object-cover"
-                        />
-                      </CarouselItem>
-                    )}
-                  </CarouselContent>
-                  <CarouselPrevious className="absolute left-4" />
-                  <CarouselNext className="absolute right-4" />
-                </Carousel>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="mt-8">
+            {/* Description */}
+            <Card>
               <CardHeader>
-                <CardTitle>Описание</CardTitle>
+                <CardTitle>Описание квартиры</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-gray-700 leading-relaxed">{project.description}</p>
-              </CardContent>
-            </Card>
+                <p className="text-gray-700 leading-relaxed mb-6">{apartment.description}</p>
 
-            <Card className="mt-8">
-              <CardHeader>
-                <CardTitle>Особенности</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                {project.features?.map((feature, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <div className="bg-blue-100 text-blue-600 p-2 rounded-full">
-                      <Star className="h-5 w-5" />
-                    </div>
-                    <span className="font-medium">{feature}</span>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{apartment.area_total}</div>
+                    <div className="text-sm text-gray-600">м² общая</div>
                   </div>
-                ))}
-              </CardContent>
-            </Card>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{apartment.area_living}</div>
+                    <div className="text-sm text-gray-600">м² жилая</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{apartment.area_kitchen}</div>
+                    <div className="text-sm text-gray-600">м² кухня</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-blue-600">{apartment.floor}</div>
+                    <div className="text-sm text-gray-600">этаж</div>
+                  </div>
+                </div>
 
-            <Card className="mt-8">
-              <CardHeader>
-                <CardTitle>Ход строительства</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {project.progress &&
-                  Object.entries(project.progress).map(([key, value]) => (
-                    <div key={key}>
-                      <div className="flex justify-between mb-1">
-                        <span className="text-sm font-medium text-gray-700">
-                          {
-                            {
-                              foundation: "Фундамент",
-                              walls: "Возведение стен",
-                              roof: "Кровля",
-                              finishing: "Отделка",
-                            }[key]
-                          }
-                        </span>
-                        <span className="text-sm font-medium text-blue-600">{value}%</span>
+                <h3 className="text-lg font-semibold mb-4">Характеристики</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Home className="w-5 h-5 text-blue-600" />
+                      <span>Комнат</span>
+                    </div>
+                    <span className="font-medium">{apartment.rooms === 0 ? "Студия" : apartment.rooms}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Square className="w-5 h-5 text-blue-600" />
+                      <span>Балкон</span>
+                    </div>
+                    <span className="font-medium">{apartment.balcony ? "Есть" : "Нет"}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <Square className="w-5 h-5 text-blue-600" />
+                      <span>Лоджия</span>
+                    </div>
+                    <span className="font-medium">{apartment.loggia ? "Есть" : "Нет"}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-2">
+                      <ChefHat className="w-5 h-5 text-blue-600" />
+                      <span>Паркинг</span>
+                    </div>
+                    <span className="font-medium">{apartment.parking ? "Включен" : "Не включен"}</span>
+                  </div>
+                </div>
+
+                <h3 className="text-lg font-semibold mb-4">Особенности квартиры</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {apartment.features?.map((feature, index) => (
+                    <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded-lg">
+                      <Star className="w-6 h-6 text-blue-600 mt-1" />
+                      <div>
+                        <div className="font-medium">{feature}</div>
                       </div>
-                      <Progress value={value} />
                     </div>
                   ))}
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="mt-8">
+            {/* Project Info */}
+            <Card>
               <CardHeader>
-                <CardTitle>Отзывы</CardTitle>
+                <CardTitle>О жилом комплексе</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-6">
-                {reviewsData.map((review) => (
-                  <div key={review.id} className="flex gap-4">
-                    <Avatar>
-                      <AvatarImage src={review.avatar || "/placeholder.svg"} />
-                      <AvatarFallback>{review.author.charAt(0)}</AvatarFallback>
-                    </Avatar>
-                    <div className="flex-1">
-                      <div className="flex justify-between items-center">
-                        <p className="font-semibold">{review.author}</p>
-                        <div className="flex items-center gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              className={`h-4 w-4 ${
-                                i < review.rating ? "text-yellow-400 fill-current" : "text-gray-300"
-                              }`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-500 mb-2">{review.date}</p>
-                      <p className="text-gray-700">{review.text}</p>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Застройщик:</span>
+                    <span className="font-medium">{apartment.developer}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Адрес:</span>
+                    <span className="font-medium">{apartment.location}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Срок сдачи:</span>
+                    <span className="font-medium">{apartment.completion}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600">Рейтинг проекта:</span>
+                    <div className="flex items-center">
+                      <Star className="w-4 h-4 text-yellow-400 fill-current mr-1" />
+                      <span className="font-medium">{apartment.rating}</span>
                     </div>
                   </div>
-                ))}
+                </div>
               </CardContent>
             </Card>
           </div>
 
+          {/* Sidebar */}
           <div className="lg:sticky lg:top-24 self-start">
             <Card>
               <CardHeader>
-                <h1 className="text-2xl font-bold">{project.name}</h1>
+                <h1 className="text-2xl font-bold">
+                  {apartment.name} №{apartment.number}
+                </h1>
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <MapPin className="h-4 w-4" />
-                  <span>{project.location}</span>
+                  <span>{apartment.project}</span>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-3xl font-bold text-blue-600">{project.price}</div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Застройщик</span>
-                  <span className="font-medium">{project.developer}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Класс</span>
-                  <Badge variant="secondary">{project.class}</Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Срок сдачи</span>
-                  <span className="font-medium">{project.completion}</span>
+                <div className="text-3xl font-bold text-blue-600">{formatPrice(apartment.current_price!)}</div>
+                <div className="text-lg text-gray-600">{pricePerSqm.toLocaleString()} ₽/м²</div>
+                {apartment.base_price !== apartment.current_price && (
+                  <div className="text-sm text-gray-500 line-through">{formatPrice(apartment.base_price!)}</div>
+                )}
+                <Separator />
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Купить квартиру</h3>
+                  <div className="space-y-3">
+                    <Input placeholder="Ваше имя" />
+                    <Input placeholder="Телефон" type="tel" />
+                    <Input placeholder="Email" type="email" />
+                    <Textarea placeholder="Дополнительные пожелания" rows={3} />
+                  </div>
                 </div>
                 <Separator />
-                <Button size="lg" className="w-full">
+                <Button size="lg" className="w-full" disabled={apartment.status !== "available"}>
                   <Phone className="h-5 w-5 mr-2" />
-                  Узнать об акции
+                  {apartment.status === "available" ? "Купить" : "Недоступна"}
                 </Button>
                 <Button size="lg" variant="outline" className="w-full bg-transparent">
                   <Mail className="h-5 w-5 mr-2" />
                   Получить консультацию
+                </Button>
+                <Button size="lg" variant="outline" className="w-full bg-transparent">
+                  <Eye className="h-5 w-5 mr-2" />
+                  3D-тур квартиры
                 </Button>
               </CardContent>
             </Card>

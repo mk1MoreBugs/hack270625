@@ -75,13 +75,11 @@ export function Footer() {
             <h3 className="font-semibold mb-4">Застройщикам</h3>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <Link href={isLoggedIn ? "/dashboard-developer" : "/login"} className="hover:text-white">
+                <Link
+                  href={isLoggedIn ? "/dashboard-developer" : "/login?callbackUrl=/dashboard-developer"}
+                  className="hover:text-white"
+                >
                   CRM-система
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="hover:text-white">
-                  Тарифы
                 </Link>
               </li>
             </ul>
@@ -91,23 +89,18 @@ export function Footer() {
             <h3 className="font-semibold mb-4">Поддержка</h3>
             <ul className="space-y-2 text-gray-400">
               <li>
-                <Link href="/about" className="hover:text-white">
+                <Link href="/help" className="hover:text-white">
                   Помощь
                 </Link>
               </li>
               <li>
-                <Link href="/about" className="hover:text-white">
+                <Link href="/contacts" className="hover:text-white">
                   Контакты
                 </Link>
               </li>
               <li>
                 <Link href="/about" className="hover:text-white">
                   О платформе
-                </Link>
-              </li>
-              <li>
-                <Link href="#" className="hover:text-white">
-                  Документы
                 </Link>
               </li>
             </ul>
