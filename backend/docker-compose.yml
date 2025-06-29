@@ -60,6 +60,10 @@ services:
         condition: service_healthy
     networks:
       - real_estate_network
+    environment:
+      - C_FORCE_ROOT=false
+      - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=true
+    user: celery
     command: celery -A app.worker.celery_app worker --loglevel=info
 
   # Celery beat (планировщик задач)
@@ -74,6 +78,10 @@ services:
         condition: service_healthy
     networks:
       - real_estate_network
+    environment:
+      - C_FORCE_ROOT=false
+      - CELERY_BROKER_CONNECTION_RETRY_ON_STARTUP=true
+    user: celery
     command: celery -A app.worker.celery_app beat --loglevel=info
 
 volumes:

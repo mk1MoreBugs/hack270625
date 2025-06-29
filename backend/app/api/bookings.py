@@ -1,17 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
-from uuid import UUID
+from typing import List, Optional
 from app.database import get_async_session
 from app.models import Booking, Property, BookingStatus, User
-from app.schemas import BookingResponse, BookingCreate, BookingUpdate
+from app.schemas import (
+    BookingRead, BookingCreate, BookingUpdate,
+    Message
+)
 from app.crud import crud_booking, crud_property
-from app.security import get_current_active_user
+from app.security import get_current_active_user, get_current_admin_user
 
 router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-@router.post("", response_model=BookingResponse, responses={
+@router.post("", response_model=BookingRead, responses={
     401: {
         "description": "Не авторизован",
         "content": {
@@ -65,7 +67,7 @@ async def create_booking(
         booking_data: Данные для создания бронирования
         
     Returns:
-        BookingResponse: Созданное бронирование
+        BookingRead: Созданное бронирование
         
     Raises:
         401: Unauthorized - Не авторизован
@@ -93,7 +95,7 @@ async def create_booking(
     return await crud_booking.create(db, booking_data.dict())
 
 
-@router.get("", response_model=List[BookingResponse])
+@router.get("", response_model=List[BookingRead])
 async def get_bookings(
     status: BookingStatus = None,
     skip: int = 0,
@@ -106,7 +108,7 @@ async def get_bookings(
     return await crud_booking.get_multi(db, skip=skip, limit=limit)
 
 
-@router.get("/{booking_id}", response_model=BookingResponse)
+@router.get("/{booking_id}", response_model=BookingRead)
 async def get_booking(
     booking_id: int,
     db: AsyncSession = Depends(get_async_session)
@@ -121,7 +123,7 @@ async def get_booking(
     return db_booking
 
 
-@router.put("/{booking_id}", response_model=BookingResponse, responses={
+@router.put("/{booking_id}", response_model=BookingRead, responses={
     401: {
         "description": "Не авторизован",
         "content": {
@@ -177,7 +179,7 @@ async def update_booking(
         booking_data: Данные для обновления
         
     Returns:
-        BookingResponse: Обновленное бронирование
+        BookingRead: Обновленное бронирование
         
     Raises:
         401: Unauthorized - Не авторизован
@@ -194,79 +196,22 @@ async def update_booking(
     return await crud_booking.update(db, db_booking, booking_data.dict(exclude_unset=True))
 
 
-@router.delete("/{booking_id}", responses={
-    401: {
-        "description": "Не авторизован",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Could not validate credentials"
-                }
-            }
-        }
-    },
-    403: {
-        "description": "Недостаточно прав",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Operation not permitted"
-                }
-            }
-        }
-    },
-    404: {
-        "description": "Бронирование не найдено",
-        "content": {
-            "application/json": {
-                "example": {
-                    "detail": "Booking not found"
-                }
-            }
-        }
-    },
-    200: {
-        "description": "Бронирование успешно удалено",
-        "content": {
-            "application/json": {
-                "example": {
-                    "message": "Booking deleted"
-                }
-            }
-        }
-    }
-})
+@router.delete("/{booking_id}", response_model=Message)
 async def delete_booking(
     booking_id: int,
     db: AsyncSession = Depends(get_async_session),
-    current_user: User = Depends(get_current_active_user)
+    _: dict = Depends(get_current_admin_user)
 ):
-    """
-    Удалить бронирование
-    
-    Args:
-        booking_id: ID бронирования
-        
-    Returns:
-        dict: Сообщение об успешном удалении
-        
-    Raises:
-        401: Unauthorized - Не авторизован
-        403: Forbidden - Недостаточно прав
-        404: Not Found - Бронирование не найдено
-    """
-    db_booking = await crud_booking.get(db, booking_id)
-    if not db_booking:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Booking not found"
-        )
+    """Delete a booking"""
+    booking = await crud_booking.get(db, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
     
     await crud_booking.delete(db, booking_id)
-    return {"message": "Booking deleted"}
+    return Message(message="Booking deleted")
 
 
-@router.get("/user/{user_id}", response_model=List[BookingResponse])
+@router.get("/user/{user_id}", response_model=List[BookingRead])
 async def get_user_bookings(
     user_id: int,
     db: AsyncSession = Depends(get_async_session)
@@ -275,18 +220,18 @@ async def get_user_bookings(
     return await crud_booking.get_by_user(db, user_id)
 
 
-@router.get("/property/{property_id}", response_model=List[BookingResponse])
+@router.get("/property/{property_id}", response_model=List[BookingRead])
 async def get_property_bookings(
-    property_id: UUID,
+    property_id: int,
     db: AsyncSession = Depends(get_async_session)
 ):
     """Получить бронирования объекта недвижимости"""
     return await crud_booking.get_by_property(db, property_id)
 
 
-@router.get("/property/{property_id}/recent", response_model=List[BookingResponse])
+@router.get("/property/{property_id}/recent", response_model=List[BookingRead])
 async def get_recent_property_bookings(
-    property_id: UUID,
+    property_id: int,
     hours: int = 24,
     db: AsyncSession = Depends(get_async_session)
 ):

@@ -3,14 +3,14 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
-# Создаем асинхронный движок для PostgreSQL
+# Create async engine for PostgreSQL
 async_engine = create_async_engine(
-    settings.database_url.replace("postgresql://", "postgresql+asyncpg://"),
+    str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://"),
     echo=True,
     future=True
 )
 
-# Создаем фабрику асинхронных сессий
+# Create async session factory
 AsyncSessionLocal = sessionmaker(
     async_engine,
     class_=AsyncSession,
@@ -19,12 +19,12 @@ AsyncSessionLocal = sessionmaker(
 
 
 async def create_db_and_tables():
-    """Создает таблицы в базе данных"""
+    """Create database tables"""
     async with async_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
 
 async def get_async_session() -> AsyncSession:
-    """Получает асинхронную сессию для работы с базой данных"""
+    """Get async database session"""
     async with AsyncSessionLocal() as session:
         yield session 

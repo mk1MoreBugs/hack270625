@@ -1,22 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
-from uuid import UUID
 
 from app.database import get_async_session
 from app.crud import crud_property_price
-from app.schemas import PropertyPriceCreate, PropertyPriceUpdate, PropertyPriceResponse
+from app.schemas import PropertyPriceCreate, PropertyPriceUpdate, PropertyPriceRead
 from app.security import get_current_user
 from app.models import User
 
 router = APIRouter(prefix="/prices", tags=["prices"])
 
 
-@router.get("/", response_model=List[PropertyPriceResponse])
+@router.get("/", response_model=List[PropertyPriceRead])
 async def get_prices(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
-    property_id: Optional[UUID] = None,
+    property_id: Optional[int] = None,
     min_price: Optional[float] = None,
     max_price: Optional[float] = None,
     db: AsyncSession = Depends(get_async_session)
@@ -43,9 +42,9 @@ async def get_prices(
         )
 
 
-@router.get("/{price_id}", response_model=PropertyPriceResponse)
+@router.get("/{price_id}", response_model=PropertyPriceRead)
 async def get_price(
-    price_id: UUID,
+    price_id: int,
     db: AsyncSession = Depends(get_async_session)
 ):
     """
@@ -68,7 +67,7 @@ async def get_price(
         )
 
 
-@router.post("/", response_model=PropertyPriceResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=PropertyPriceRead, status_code=status.HTTP_201_CREATED)
 async def create_price(
     price_data: PropertyPriceCreate,
     current_user: User = Depends(get_current_user),
@@ -96,9 +95,9 @@ async def create_price(
         )
 
 
-@router.put("/{price_id}", response_model=PropertyPriceResponse)
+@router.put("/{price_id}", response_model=PropertyPriceRead)
 async def update_price(
-    price_id: UUID,
+    price_id: int,
     price_data: PropertyPriceUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
@@ -134,7 +133,7 @@ async def update_price(
 
 @router.delete("/{price_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_price(
-    price_id: UUID,
+    price_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_async_session)
 ):
