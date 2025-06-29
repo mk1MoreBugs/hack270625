@@ -3,7 +3,6 @@
 import { MapPin, Star, Share2, Heart, Phone, Mail } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
-import { projectsData, reviewsData } from "@/lib/data"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,13 +18,30 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb"
+import { useProject, useProjectReviews } from "@/lib/api-hooks"
+import { mapApiProjectToProject, mapApiReviewToReview, type Review } from "@/lib/types"
 
-export default function ProjectPage({ params }: { params: { id: string } }) {
-  const project = projectsData.find((p) => p.id === "1") // Static for now
+interface PageProps {
+  params: {
+    id: string;
+  };
+  searchParams: { [key: string]: string | string[] | undefined };
+}
 
-  if (!project) {
-    return <div>Проект не найден</div>
+export default function ProjectPage({ params, searchParams }: PageProps) {
+  const { data: apiProject, error: projectError } = useProject(params.id)
+  const { data: apiReviews, error: reviewsError } = useProjectReviews(params.id)
+  
+  if (projectError || reviewsError) {
+    return <div className="text-center text-red-500">Ошибка загрузки данных</div>
   }
+
+  if (!apiProject) {
+    return <div className="text-center">Загрузка...</div>
+  }
+
+  const project = mapApiProjectToProject(apiProject)
+  const reviews = apiReviews ? apiReviews.map(mapApiReviewToReview) : []
 
   return (
     <div className="bg-gray-50">
@@ -151,10 +167,10 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                 <CardTitle>Отзывы</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {reviewsData.map((review) => (
+                {reviews.map((review: Review) => (
                   <div key={review.id} className="flex gap-4">
                     <Avatar>
-                      <AvatarImage src={review.avatar || "/placeholder.svg"} />
+                      <AvatarImage src={review.avatar || "/placeholder-user.jpg"} />
                       <AvatarFallback>{review.author.charAt(0)}</AvatarFallback>
                     </Avatar>
                     <div className="flex-1">
@@ -176,6 +192,9 @@ export default function ProjectPage({ params }: { params: { id: string } }) {
                     </div>
                   </div>
                 ))}
+                {reviews.length === 0 && (
+                  <p className="text-center text-gray-500">Пока нет отзывов</p>
+                )}
               </CardContent>
             </Card>
           </div>

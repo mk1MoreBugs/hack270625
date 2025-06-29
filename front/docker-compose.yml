@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  frontend:
+    build: .
+    network_mode: "host"
+    environment:
+      - NEXT_PUBLIC_API_HOST=${NEXT_PUBLIC_API_HOST:-46.173.24.165}
+      - NEXT_PUBLIC_API_PORT=${NEXT_PUBLIC_API_PORT:-8000}
+      - HOST=${HOST:-46.173.24.165}
+      - PORT=${PORT:-3000}
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next 

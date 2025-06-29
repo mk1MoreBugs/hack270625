@@ -24,12 +24,11 @@ export const homeStats = [
   { label: "Экономия на комиссии", value: "до 5%", icon: Star },
 ] satisfies { label: string; value: string; icon: React.ComponentType<any> }[]
 
-export const filterOptions: FilterOptions = {
+export const filterOptions = {
   regions: ["Краснодар", "Сочи", "Новороссийск", "Анапа"],
   classes: ["Эконом", "Комфорт", "Бизнес", "Элит"],
   completion: ["Сдан", "2024", "2025", "2026"],
-  features: ["Паркинг", "Детская площадка", "Закрытая территория", "Рядом с парком"],
-  promotions: ["Скидка 10%", "Паркинг в подарок", "Ипотека 0.1%"],
+  status: ["В продаже", "Строится", "Сдан", "План"]
 }
 
 export const projectsData: Project[] = [

@@ -3,7 +3,7 @@
 import type React from "react"
 import { Suspense } from "react"
 import { useSearchParams } from "next/navigation"
-import { useState, useMemo, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { Filter, ArrowUpDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,11 +12,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Slider } from "@/components/ui/slider"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { projectsData, filterOptions } from "@/lib/data"
+import { filterOptions } from "@/lib/data"
 import { ProjectCard } from "@/components/projects/ProjectCard"
+import { useProjects } from "@/lib/api-hooks"
+import { mapApiProjectToProject, type Project } from "@/lib/types"
 
 function CatalogContent() {
   const searchParams = useSearchParams()
+  const { data: apiProjects, error } = useProjects()
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "")
   const [priceRange, setPriceRange] = useState<[number, number]>([
@@ -30,15 +33,9 @@ function CatalogContent() {
   const [selectedCompletion, setSelectedCompletion] = useState<string[]>(
     searchParams.get("completion") ? [searchParams.get("completion")!] : [],
   )
-  const [selectedFeatures, setSelectedFeatures] = useState<string[]>([])
-  const [selectedPromotions, setSelectedPromotions] = useState<string[]>([])
-
-  useEffect(() => {
-    if (searchParams.get("promo") === "true") {
-      setSelectedPromotions(filterOptions.promotions)
-    }
-  }, [searchParams])
-
+  const [selectedStatus, setSelectedStatus] = useState<string[]>(
+    searchParams.get("status") ? [searchParams.get("status")!] : [],
+  )
   const [sortBy, setSortBy] = useState("price-asc")
 
   const handleCheckboxChange = (setter: React.Dispatch<React.SetStateAction<string[]>>, value: string) => {
@@ -51,82 +48,80 @@ function CatalogContent() {
     setSelectedRegion("all")
     setSelectedClasses([])
     setSelectedCompletion([])
-    setSelectedFeatures([])
-    setSelectedPromotions([])
+    setSelectedStatus([])
     setSortBy("price-asc")
   }
 
   const displayedProjects = useMemo(() => {
-    let filtered = [...projectsData]
+    if (!apiProjects) return []
+    
+    let filtered = apiProjects.map(mapApiProjectToProject)
 
     if (searchQuery) {
       const lowercasedQuery = searchQuery.toLowerCase()
       filtered = filtered.filter(
-        (p) =>
+        (p: Project) =>
           p.name.toLowerCase().includes(lowercasedQuery) ||
           p.developer.toLowerCase().includes(lowercasedQuery) ||
           p.location.toLowerCase().includes(lowercasedQuery),
       )
     }
 
-    const numericPrice = (priceStr: string): number => {
-      const priceMatch = priceStr.match(/(\d+([.,]\d+)?)/)
-      if (!priceMatch) return 0
-      const price = Number.parseFloat(priceMatch[0].replace(",", ".")) * 1000000
-      return price
-    }
-
-    filtered = filtered.filter((p) => {
-      const price = numericPrice(p.price)
+    filtered = filtered.filter((p: Project) => {
+      const price = parseInt(p.price.replace(/[^\d]/g, ''))
       return price >= priceRange[0] && price <= priceRange[1]
     })
 
     if (selectedRegion !== "all") {
-      filtered = filtered.filter((p) => p.location.includes(selectedRegion))
+      filtered = filtered.filter((p: Project) => p.location.includes(selectedRegion))
     }
 
     if (selectedClasses.length > 0) {
-      filtered = filtered.filter((p) => selectedClasses.includes(p.class))
+      filtered = filtered.filter((p: Project) => selectedClasses.includes(p.class))
     }
 
     if (selectedCompletion.length > 0) {
-      filtered = filtered.filter((p) => selectedCompletion.includes(p.completion))
+      filtered = filtered.filter((p: Project) => selectedCompletion.includes(p.completion))
     }
 
-    if (selectedFeatures.length > 0) {
-      filtered = filtered.filter((p) => p.features?.some((feature) => selectedFeatures.includes(feature)))
-    }
-
-    if (selectedPromotions.length > 0) {
-      filtered = filtered.filter((p) => p.promotion && selectedPromotions.includes(p.promotion))
+    if (selectedStatus.length > 0) {
+      filtered = filtered.filter((p: Project) => p.status && selectedStatus.includes(p.status))
     }
 
     switch (sortBy) {
       case "price-asc":
-        filtered.sort((a, b) => numericPrice(a.price) - numericPrice(b.price))
+        filtered.sort((a: Project, b: Project) => parseInt(a.price.replace(/[^\d]/g, '')) - parseInt(b.price.replace(/[^\d]/g, '')))
         break
       case "price-desc":
-        filtered.sort((a, b) => numericPrice(b.price) - numericPrice(a.price))
+        filtered.sort((a: Project, b: Project) => parseInt(b.price.replace(/[^\d]/g, '')) - parseInt(a.price.replace(/[^\d]/g, '')))
         break
       case "rating":
-        filtered.sort((a, b) => (b.rating || 0) - (a.rating || 0))
+        filtered.sort((a: Project, b: Project) => (b.rating || 0) - (a.rating || 0))
         break
       case "completion":
-        filtered.sort((a, b) => a.completion.localeCompare(b.completion))
+        filtered.sort((a: Project, b: Project) => a.completion.localeCompare(b.completion))
         break
     }
 
     return filtered
   }, [
+    apiProjects,
     searchQuery,
     priceRange,
     selectedRegion,
     selectedClasses,
     selectedCompletion,
-    selectedFeatures,
-    selectedPromotions,
+    selectedStatus,
     sortBy,
   ])
+
+  if (error) {
+    return <div className="text-center text-red-500">Ошибка загрузки данных</div>
+  }
+
+  if (!apiProjects) {
+    return <div className="text-center">Загрузка...</div>
+  }
 
   const filterContentProps = {
     priceRange,
@@ -137,10 +132,8 @@ function CatalogContent() {
     handleClassChange: (value: string) => handleCheckboxChange(setSelectedClasses, value),
     selectedCompletion,
     handleCompletionChange: (value: string) => handleCheckboxChange(setSelectedCompletion, value),
-    selectedFeatures,
-    handleFeatureChange: (value: string) => handleCheckboxChange(setSelectedFeatures, value),
-    selectedPromotions,
-    handlePromotionChange: (value: string) => handleCheckboxChange(setSelectedPromotions, value),
+    selectedStatus,
+    handleStatusChange: (value: string) => handleCheckboxChange(setSelectedStatus, value),
     resetFilters,
   }
 
@@ -162,7 +155,9 @@ function CatalogContent() {
                     <SheetTitle>Фильтры поиска</SheetTitle>
                     <SheetDescription>Настройте параметры для поиска идеального жилья</SheetDescription>
                   </SheetHeader>
-                  <FilterContent {...filterContentProps} />
+                  <div className="mt-6">
+                    <FilterContent {...filterContentProps} />
+                  </div>
                 </SheetContent>
               </Sheet>
             </div>
@@ -203,38 +198,21 @@ function CatalogContent() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between">
-                <p className="text-gray-600">Найдено {displayedProjects.length} проектов</p>
-              </div>
-            </div>
-
-            {displayedProjects.length > 0 ? (
-              <div className="grid gap-6 grid-cols-1 md:grid-cols-2">
-                {displayedProjects.map((project) => (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedProjects.map((project: Project) => (
                   <ProjectCard key={project.id} project={project} />
                 ))}
+                {displayedProjects.length === 0 && (
+                  <div className="col-span-full text-center text-gray-500">
+                    Ничего не найдено. Попробуйте изменить параметры поиска.
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="text-center py-16 bg-white rounded-lg shadow-sm">
-                <h3 className="text-xl font-semibold">Ничего не найдено</h3>
-                <p className="text-gray-500 mt-2">Попробуйте изменить параметры фильтра или сбросить их.</p>
-                <Button onClick={resetFilters} className="mt-4">
-                  Сбросить фильтры
-                </Button>
-              </div>
-            )}
+            </div>
           </main>
         </div>
       </div>
     </div>
-  )
-}
-
-export default function CatalogPage() {
-  return (
-    <Suspense fallback={<div>Загрузка каталога...</div>}>
-      <CatalogContent />
-    </Suspense>
   )
 }
 
@@ -247,55 +225,37 @@ function FilterContent({
   handleClassChange,
   selectedCompletion,
   handleCompletionChange,
-  selectedFeatures,
-  handleFeatureChange,
-  selectedPromotions,
-  handlePromotionChange,
+  selectedStatus,
+  handleStatusChange,
   resetFilters,
 }: any) {
   return (
-    <div className="space-y-6 py-4">
+    <div className="space-y-6">
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">
-          Цена: {priceRange[0].toLocaleString()} - {priceRange[1].toLocaleString()} ₽
-        </label>
-        <Slider
-          value={priceRange}
-          onValueChange={(value: [number, number]) => setPriceRange(value)}
-          max={30000000}
-          min={1000000}
-          step={100000}
-          className="w-full"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Акции и скидки</label>
-        <div className="space-y-2">
-          {filterOptions.promotions.map((promo) => (
-            <div key={promo} className="flex items-center space-x-2">
-              <Checkbox
-                id={`promo-${promo}`}
-                checked={selectedPromotions.includes(promo)}
-                onCheckedChange={() => handlePromotionChange(promo)}
-              />
-              <label
-                htmlFor={`promo-${promo}`}
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {promo}
-              </label>
-            </div>
-          ))}
+        <h3 className="font-medium mb-4">Цена</h3>
+        <div className="space-y-4">
+          <div className="flex justify-between">
+            <span>{priceRange[0].toLocaleString('ru-RU')} ₽</span>
+            <span>{priceRange[1].toLocaleString('ru-RU')} ₽</span>
+          </div>
+          <Slider
+            value={priceRange}
+            min={1000000}
+            max={30000000}
+            step={100000}
+            onValueChange={setPriceRange}
+          />
         </div>
       </div>
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Регион</label>
+        <h3 className="font-medium mb-4">Район</h3>
         <Select value={selectedRegion} onValueChange={setSelectedRegion}>
           <SelectTrigger>
-            <SelectValue placeholder="Выберите регион" />
+            <SelectValue placeholder="Выберите район" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все регионы</SelectItem>
+            <SelectItem value="all">Все районы</SelectItem>
             {filterOptions.regions.map((region) => (
               <SelectItem key={region} value={region}>
                 {region}
@@ -304,71 +264,72 @@ function FilterContent({
           </SelectContent>
         </Select>
       </div>
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Класс жилья</label>
+        <h3 className="font-medium mb-4">Класс жилья</h3>
         <div className="space-y-2">
           {filterOptions.classes.map((cls) => (
-            <div key={cls} className="flex items-center space-x-2">
+            <div key={cls} className="flex items-center">
               <Checkbox
                 id={`class-${cls}`}
                 checked={selectedClasses.includes(cls)}
                 onCheckedChange={() => handleClassChange(cls)}
               />
-              <label
-                htmlFor={`class-${cls}`}
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
+              <label htmlFor={`class-${cls}`} className="ml-2 text-sm">
                 {cls}
               </label>
             </div>
           ))}
         </div>
       </div>
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Срок сдачи</label>
+        <h3 className="font-medium mb-4">Срок сдачи</h3>
         <div className="space-y-2">
           {filterOptions.completion.map((year) => (
-            <div key={year} className="flex items-center space-x-2">
+            <div key={year} className="flex items-center">
               <Checkbox
                 id={`completion-${year}`}
                 checked={selectedCompletion.includes(year)}
                 onCheckedChange={() => handleCompletionChange(year)}
               />
-              <label
-                htmlFor={`completion-${year}`}
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
+              <label htmlFor={`completion-${year}`} className="ml-2 text-sm">
                 {year}
               </label>
             </div>
           ))}
         </div>
       </div>
+
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-3">Удобства</label>
+        <h3 className="font-medium mb-4">Статус</h3>
         <div className="space-y-2">
-          {filterOptions.features.map((feature) => (
-            <div key={feature} className="flex items-center space-x-2">
+          {filterOptions.status.map((status) => (
+            <div key={status} className="flex items-center">
               <Checkbox
-                id={`feature-${feature}`}
-                checked={selectedFeatures.includes(feature)}
-                onCheckedChange={() => handleFeatureChange(feature)}
+                id={`status-${status}`}
+                checked={selectedStatus.includes(status)}
+                onCheckedChange={() => handleStatusChange(status)}
               />
-              <label
-                htmlFor={`feature-${feature}`}
-                className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-              >
-                {feature}
+              <label htmlFor={`status-${status}`} className="ml-2 text-sm">
+                {status}
               </label>
             </div>
           ))}
         </div>
       </div>
-      <div className="pt-4 border-t">
-        <Button variant="outline" className="w-full bg-transparent" onClick={resetFilters}>
-          Сбросить все фильтры
-        </Button>
-      </div>
+
+      <Button variant="outline" className="w-full" onClick={resetFilters}>
+        Сбросить фильтры
+      </Button>
     </div>
+  )
+}
+
+export default function CatalogPage() {
+  return (
+    <Suspense fallback={<div>Загрузка...</div>}>
+      <CatalogContent />
+    </Suspense>
   )
 }
