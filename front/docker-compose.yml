@@ -12,4 +12,8 @@ services:
     volumes:
       - .:/app
       - /app/node_modules
-      - /app/.next 
+      - /app/.next
+      deploy:
+      resources:
+        limits:
+          memory: 0.5G
