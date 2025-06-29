@@ -1,5 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List, Optional
+from sqlalchemy import select, and_, func
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import statistics
 from app.models import (
@@ -37,47 +38,71 @@ class DynamicPricingService:
         
         return self.config
     
-    async def calculate_demand_score(self, property_obj: Property) -> float:
-        """Вычисляет demand_score для объекта недвижимости"""
-        analytics = await crud_property_analytics.get(self.session, property_obj.id)
+    async def calculate_demand_score(self, property_id: int) -> float:
+        """Рассчитывает оценку спроса на основе просмотров и бронирований"""
+        # Получаем статистику за последние 30 дней
+        start_date = datetime.utcnow() - timedelta(days=30)
         
-        if not analytics:
-            return 0.0
-        
-        config = await self._get_config()
-        
-        # demand = 0.5·views_t24h + 2·leads_t24h + 5·bookings_t24h
-        demand = (
-            config.k1 * analytics.clicks_total +
-            config.k2 * analytics.favourites_total +
-            config.k3 * analytics.bookings_total
+        # Получаем количество просмотров
+        views_result = await self.session.execute(
+            select(func.count(ViewsLog.id))
+            .where(
+                and_(
+                    ViewsLog.property_id == property_id,
+                    ViewsLog.occurred_at >= start_date
+                )
+            )
         )
+        views_count = views_result.scalar() or 0
         
-        return demand
+        # Получаем количество бронирований
+        bookings_result = await self.session.execute(
+            select(func.count(Booking.id))
+            .where(
+                and_(
+                    Booking.property_id == property_id,
+                    Booking.booked_at >= start_date
+                )
+            )
+        )
+        bookings_count = bookings_result.scalar() or 0
+        
+        # Простая формула для оценки спроса
+        # Можно настроить веса для просмотров и бронирований
+        views_weight = 0.3
+        bookings_weight = 0.7
+        
+        # Нормализуем значения (предполагаем, что хорошие показатели - это 100 просмотров и 5 бронирований в месяц)
+        normalized_views = min(views_count / 100.0, 1.0)
+        normalized_bookings = min(bookings_count / 5.0, 1.0)
+        
+        return (normalized_views * views_weight + normalized_bookings * bookings_weight) * 100
     
     async def get_cluster_median_demand(self, property_obj: Property) -> float:
         """Получает медианный спрос для кластера (проект + тип комнат)"""
         # Получаем все объекты того же проекта и типа комнат
+        project_id = property_obj.project_id if property_obj.project else None
+        rooms = property_obj.residential.rooms if property_obj.residential else None
+        
         cluster_properties = await self.crud.get_cluster_properties(
-            property_obj.project.id if property_obj.project else None,
-            property_obj.residential.rooms if property_obj.residential else None,
+            project_id,
+            rooms,
             property_obj.id
         )
         
         if not cluster_properties:
-            return 1.0  # Если нет других объектов в кластере
+            return 0.0
         
-        # Вычисляем demand_score для каждого объекта в кластере
-        demand_scores = []
-        for prop in cluster_properties:
-            demand = await self.calculate_demand_score(prop)
-            if demand > 0:
-                demand_scores.append(demand)
+        # Вычисляем медианный спрос
+        demands = [p.analytics.demand_score for p in cluster_properties if p.analytics]
+        if not demands:
+            return 0.0
         
-        if not demand_scores:
-            return 1.0
-        
-        return statistics.median(demand_scores)
+        demands.sort()
+        mid = len(demands) // 2
+        if len(demands) % 2 == 0:
+            return (demands[mid - 1] + demands[mid]) / 2
+        return demands[mid]
     
     async def should_update_price(self, property_obj: Property) -> bool:
         """Проверяет, можно ли обновлять цену для объекта недвижимости"""
@@ -98,29 +123,35 @@ class DynamicPricingService:
         
         return True
     
-    async def calculate_price_change(self, property_obj: Property) -> Optional[float]:
-        """Вычисляет изменение цены в процентах"""
-        demand_score = await self.calculate_demand_score(property_obj)
-        median_demand = await self.get_cluster_median_demand(property_obj)
+    async def calculate_price_adjustment(
+        self,
+        current_price: float,
+        demand_score: float,
+        median_demand: float
+    ) -> float:
+        """Рассчитывает корректировку цены на основе спроса"""
+        # Настройки для корректировки цены
+        max_adjustment = 0.10  # Максимальное изменение цены (10%)
+        demand_threshold = 0.2  # Порог разницы в спросе для изменения цены
         
-        if median_demand == 0:
-            return None
+        # Нормализуем оценки спроса
+        demand_normalized = demand_score / 100.0
+        median_normalized = median_demand / 100.0
         
-        demand_normalized = demand_score / median_demand
-        analytics = await crud_property_analytics.get(self.session, property_obj.id)
+        # Вычисляем разницу в спросе
+        demand_diff = demand_normalized - median_normalized
         
-        # Алгоритм изменения цены
-        if demand_normalized > 1.3:
-            # Высокий спрос - повышаем цену
-            price_change = min(settings.elasticity_cap, 3.0)
-            return price_change
-        elif demand_normalized < 0.7 and analytics and analytics.days_on_market > 14:
-            # Низкий спрос и объект давно на сайте - снижаем цену
-            price_change = -min(settings.elasticity_cap, 3.0)
-            return price_change
-        else:
-            # Оставляем цену без изменений
-            return 0.0
+        if abs(demand_diff) < demand_threshold:
+            return current_price
+        
+        # Рассчитываем процент изменения
+        adjustment_percent = demand_diff * max_adjustment
+        
+        # Применяем изменение к текущей цене
+        new_price = current_price * (1 + adjustment_percent)
+        
+        # Округляем до тысяч
+        return round(new_price / 1000) * 1000
     
     def apply_price_limits(self, property_obj: Property, new_price: float) -> float:
         """Применяет ограничения на изменение цены"""
@@ -143,58 +174,63 @@ class DynamicPricingService:
         else:
             return "Цена осталась без изменений"
     
-    async def update_property_price(self, property_obj: Property) -> Optional[DynamicPricingResult]:
-        """Обновляет цену объекта недвижимости согласно алгоритму динамического ценообразования"""
-        if not await self.should_update_price(property_obj):
-            return None
+    async def update_property_price(self, property_obj: Property) -> Dict[str, Any]:
+        """Обновляет цену объекта на основе динамического ценообразования"""
+        if not property_obj.price:
+            return {
+                "success": False,
+                "error": "Property has no price information"
+            }
         
-        price_change_percent = await self.calculate_price_change(property_obj)
-        if price_change_percent is None or price_change_percent == 0:
-            return None
+        # Получаем текущие показатели
+        current_price = property_obj.price.current_price
+        demand_score = await self.calculate_demand_score(property_obj.id)
+        median_demand = await self.get_cluster_median_demand(property_obj)
         
-        # Вычисляем новую цену
-        price_change_multiplier = 1 + price_change_percent / 100
-        new_price = property_obj.price.current_price * price_change_multiplier
+        # Рассчитываем новую цену
+        new_price = await self.calculate_price_adjustment(
+            current_price,
+            demand_score,
+            median_demand
+        )
         
-        # Применяем ограничения
-        new_price = self.apply_price_limits(property_obj, new_price)
+        if new_price == current_price:
+            return {
+                "success": True,
+                "message": "No price adjustment needed",
+                "price_change": 0
+            }
         
-        # Проверяем, действительно ли цена изменилась
-        if abs(new_price - property_obj.price.current_price) < 0.01:
-            return None
+        # Определяем причину изменения
+        price_change = new_price - current_price
+        price_change_percent = (price_change / current_price) * 100
         
-        old_price = property_obj.price.current_price
+        if price_change > 0:
+            reason = "high_demand"
+            description = "Increased due to high demand"
+        else:
+            reason = "low_demand"
+            description = "Decreased due to low demand"
         
-        # Обновляем цену объекта недвижимости
-        await self.crud.update_property_price(property_obj.id, new_price)
+        # Обновляем цену
+        await self.crud.update_property_price(
+            property_obj.id,
+            new_price,
+            reason,
+            description
+        )
         
-        # Создаем запись в истории цен
-        description = await self.generate_price_change_description(property_obj, price_change_percent)
-        price_history_data = {
-            "property_id": property_obj.id,
-            "old_price": old_price,
+        return {
+            "success": True,
+            "old_price": current_price,
             "new_price": new_price,
-            "reason": PriceChangeReason.DYNAMIC,
+            "price_change": price_change,
+            "price_change_percent": price_change_percent,
+            "demand_score": demand_score,
+            "median_demand": median_demand,
+            "reason": reason,
             "description": description
         }
-        
-        await self.crud.create_price_history(price_history_data)
-        
-        # Вычисляем demand_score для результата
-        demand_score = await self.calculate_demand_score(property_obj)
-        median_demand = await self.get_cluster_median_demand(property_obj)
-        demand_normalized = demand_score / median_demand if median_demand > 0 else 0
-        
-        return DynamicPricingResult(
-            property_id=property_obj.id,
-            old_price=old_price,
-            new_price=new_price,
-            price_change_percent=price_change_percent,
-            demand_score=demand_score,
-            demand_normalized=demand_normalized,
-            reason="dynamic",
-            description=description
-        )
     
     async def update_all_property_prices(self) -> List[DynamicPricingResult]:
         """Обновляет цены всех доступных объектов недвижимости"""

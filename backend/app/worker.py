@@ -1,5 +1,6 @@
 from celery import Celery
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.database import AsyncSessionLocal
 from app.services.stats_aggregator import StatsAggregatorService
@@ -31,7 +32,21 @@ celery_app.conf.update(
 
 async def get_async_session() -> AsyncSession:
     """Получает асинхронную сессию для работы с базой данных"""
-    async with AsyncSessionLocal() as session:
+
+
+    celery_engine = create_async_engine(
+        str(settings.database_url).replace("postgresql://", "postgresql+asyncpg://"),
+        pool_size=5,
+        max_overflow=10,
+        )
+
+    CelerySessionLocal = sessionmaker(
+        bind=celery_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+        )
+
+    async with CelerySessionLocal() as session:
         return session
 
 

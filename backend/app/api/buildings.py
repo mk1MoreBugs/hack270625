@@ -1,160 +1,137 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import Session, select
 from typing import List, Optional
-from uuid import UUID
 
 from app.database import get_async_session
-from app.crud import crud_building
-from app.schemas import BuildingCreate, BuildingUpdate, BuildingResponse
-from app.security import get_current_user
-from app.models import User
+from app.models import Building, Project, Developer, UserRole
+from app.security import get_current_user, get_current_admin_user, get_current_user_role
+from app.schemas import BuildingCreate, BuildingRead, BuildingUpdate, Message, BuildingRead
 
-router = APIRouter(prefix="/buildings", tags=["buildings"])
+router = APIRouter(
+    prefix="/buildings",
+    tags=["buildings"]
+)
 
 
-@router.get("/", response_model=List[BuildingResponse])
+@router.get(
+    "",
+    response_model=List[BuildingRead],
+    summary="Получить список зданий",
+    description="Получение списка всех доступных зданий"
+)
 async def get_buildings(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
-    project_id: Optional[UUID] = None,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Получить список зданий с фильтрацией
-    """
-    try:
-        buildings = await crud_building.get_multi(db, skip=skip, limit=limit)
-        
-        # Применяем фильтры
-        if project_id:
-            buildings = [b for b in buildings if b.project_id == project_id]
-        
-        return buildings
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении зданий: {str(e)}"
-        )
+    project_id: int = None,
+    session: AsyncSession = Depends(get_async_session)
+) -> List[BuildingRead]:
+    query = select(Building)
+    if project_id:
+        query = query.where(Building.project_id == project_id)
+    result = await session.execute(query)
+    buildings = result.scalars().all()
+    return [BuildingRead.from_orm(b) for b in buildings]
 
 
-@router.get("/{building_id}", response_model=BuildingResponse)
+@router.get(
+    "/{building_id}",
+    response_model=BuildingRead,
+    summary="Получить здание",
+    description="Получение информации о конкретном здании по его ID"
+)
 async def get_building(
-    building_id: UUID,
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Получить информацию о здании
-    """
-    try:
-        building = await crud_building.get(db, building_id)
-        if not building:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Здание не найдено"
-            )
-        return building
-    except HTTPException:
-        raise
-    except Exception as e:
+    building_id: int,
+    session: AsyncSession = Depends(get_async_session)
+) -> BuildingRead:
+    building = await session.get(Building, building_id)
+    if not building:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при получении здания: {str(e)}"
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Здание не найдено"
         )
+    return BuildingRead.from_orm(building)
 
 
-@router.post("/", response_model=BuildingResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=BuildingRead,
+    summary="Создать здание",
+    description="Создание нового здания в проекте (только для застройщиков)"
+)
 async def create_building(
     building_data: BuildingCreate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Создать новое здание
-    """
-    try:
-        # Проверяем права доступа
-        if current_user.role not in ["admin", "developer"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для создания здания"
-            )
-        
-        building = await crud_building.create(db, building_data.dict())
-        return building
-    except HTTPException:
-        raise
-    except Exception as e:
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
+) -> BuildingRead:
+    if current_user_role != UserRole.DEVELOPER:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при создании здания: {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут создавать здания"
         )
+    
+    building = Building(**building_data.dict())
+    session.add(building)
+    await session.commit()
+    await session.refresh(building)
+    return BuildingRead.from_orm(building)
 
 
-@router.put("/{building_id}", response_model=BuildingResponse)
+@router.put(
+    "/{building_id}",
+    response_model=BuildingRead,
+    summary="Обновить здание",
+    description="Обновление информации о здании (только для застройщиков)"
+)
 async def update_building(
-    building_id: UUID,
+    building_id: int,
     building_data: BuildingUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Обновить здание
-    """
-    try:
-        # Проверяем права доступа
-        if current_user.role not in ["admin", "developer"]:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для обновления здания"
-            )
-        
-        building = await crud_building.get(db, building_id)
-        if not building:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Здание не найдено"
-            )
-        
-        updated_building = await crud_building.update(db, building, building_data.dict(exclude_unset=True))
-        return updated_building
-    except HTTPException:
-        raise
-    except Exception as e:
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
+) -> BuildingRead:
+    if current_user_role != UserRole.DEVELOPER:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при обновлении здания: {str(e)}"
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут обновлять здания"
         )
-
-
-@router.delete("/{building_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_building(
-    building_id: UUID,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_async_session)
-):
-    """
-    Удалить здание
-    """
-    try:
-        # Проверяем права доступа
-        if current_user.role != "admin":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Недостаточно прав для удаления здания"
-            )
-        
-        building = await crud_building.get(db, building_id)
-        if not building:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Здание не найдено"
-            )
-        
-        await crud_building.delete(db, building_id)
-    except HTTPException:
-        raise
-    except Exception as e:
+    
+    building = await session.get(Building, building_id)
+    if not building:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Ошибка при удалении здания: {str(e)}"
-        ) 
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Здание не найдено"
+        )
+    
+    for field, value in building_data.dict(exclude_unset=True).items():
+        setattr(building, field, value)
+    
+    await session.commit()
+    await session.refresh(building)
+    return BuildingRead.from_orm(building)
+
+
+@router.delete(
+    "/{building_id}",
+    response_model=Message,
+    summary="Удалить здание",
+    description="Удаление здания (только для застройщиков)"
+)
+async def delete_building(
+    building_id: int,
+    current_user_role: UserRole = Depends(get_current_user_role),
+    session: AsyncSession = Depends(get_async_session)
+):
+    if current_user_role != UserRole.DEVELOPER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Только застройщики могут удалять здания"
+        )
+    
+    building = await session.get(Building, building_id)
+    if not building:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Здание не найдено"
+        )
+    
+    await session.delete(building)
+    await session.commit()
+    return {"message": "Здание успешно удалено"} 
