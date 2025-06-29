@@ -13,7 +13,7 @@ services:
       - .:/app
       - /app/node_modules
       - /app/.next
-      deploy:
+    deploy:
       resources:
         limits:
           memory: 0.5G
