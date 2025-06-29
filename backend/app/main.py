@@ -98,6 +98,23 @@ async def root():
     }
 
 
+@app.get("/tbexport")
+async def tbexport():
+    return """
+    <html>
+        <head>
+            <title>Some HTML in here</title>
+        </head>
+        <body>
+            <div>
+                <iframe src="tbexport/tbexport.html" allowfullscreen="true"></iframe>
+                <iframe src="tbexport/tbexport.mview" allowfullscreen="true"></iframe>
+            </div>
+        </body>
+    </html>
+    """
+
+
 @app.get(
     "/health",
     tags=["default"],
