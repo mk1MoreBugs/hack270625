@@ -33,7 +33,7 @@ class UserRead(UserBase):
     updated_at: datetime
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Developer schemas
@@ -62,7 +62,7 @@ class DeveloperRead(DeveloperBase):
     projects_count: int = 0
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Project schemas
@@ -96,7 +96,7 @@ class ProjectRead(ProjectBase):
     developer_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Building schemas
@@ -128,7 +128,7 @@ class BuildingRead(BuildingBase):
     project_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Property schemas
@@ -167,7 +167,7 @@ class PropertyRead(PropertyBase):
     building_id: Optional[int] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Property Address schemas
@@ -199,7 +199,7 @@ class PropertyAddressRead(PropertyAddressBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Property Price schemas
@@ -231,7 +231,7 @@ class PropertyPriceRead(PropertyPriceBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Residential Property schemas
@@ -271,7 +271,7 @@ class ResidentialPropertyRead(ResidentialPropertyBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Property Features schemas
@@ -307,7 +307,7 @@ class PropertyFeaturesRead(PropertyFeaturesBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Property Analytics schemas
@@ -343,7 +343,7 @@ class PropertyAnalyticsRead(PropertyAnalyticsBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Commercial Property schemas
@@ -434,7 +434,7 @@ class PropertyMediaRead(PropertyMediaBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Promo Tag schemas
@@ -459,7 +459,7 @@ class PromoTagRead(PromoTagBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Mortgage Program schemas
@@ -492,7 +492,7 @@ class MortgageProgramRead(MortgageProgramBase):
     property_id: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 # Price History schemas

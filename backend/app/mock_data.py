@@ -91,7 +91,8 @@ async def create_mock_developers(session: AsyncSession) -> List[int]:
             founding_year=random.randint(1990, 2020),
             website=f"https://developer{i+1}.ru",
             rating=round(random.uniform(4.0, 5.0), 1),
-            projects_count=random.randint(1, 5)
+            projects_count=random.randint(1, 5),
+            created_at=datetime.utcnow() - timedelta(days=random.randint(1, 365))
         )
         developers.append(developer)
     
@@ -116,7 +117,8 @@ async def create_mock_projects(session: AsyncSession) -> List[int]:
             completion_date=date.today() + timedelta(days=random.randint(100, 500)),
             status=random.choice(["active", "completed"]),
             total_area=random.randint(5000, 50000),
-            total_units=random.randint(100, 1000)
+            total_units=random.randint(100, 1000),
+            query=f"жк южный {i+1} краснодар новостройка"
         )
         projects.append(project)
     
@@ -134,14 +136,16 @@ async def create_mock_buildings(session: AsyncSession) -> List[int]:
     
     for i in range(50):
         project_id = random.choice(project_ids)
+        building_number = str(random.randint(1, 10))
         building = Building(
             project_id=project_id,
-            number=str(random.randint(1, 10)),
+            number=building_number,
             floors_total=random.randint(5, 25),
             completion_date=date.today() + timedelta(days=random.randint(100, 500)),
             status=random.choice(["under_construction", "completed"]),
             total_units=random.randint(50, 200),
-            available_units=random.randint(10, 50)
+            available_units=random.randint(10, 50),
+            qury=f"корпус {building_number} литер {building_number}"
         )
         buildings.append(building)
     
@@ -158,15 +162,25 @@ async def create_mock_properties(session: AsyncSession) -> List[int]:
     properties = []
     
     for i in range(100):
+        property_type = PropertyType.RESIDENTIAL
+        category = random.choice([
+            PropertyCategory.FLAT_NEW,
+            PropertyCategory.FLAT_SECONDARY,
+            PropertyCategory.TOWNHOUSE
+        ])
+        rooms = random.randint(1, 4)
+        area = random.randint(30, 150)
+        
         property = Property(
             external_id=f"PROP{i+1}",
-            property_type=PropertyType.RESIDENTIAL,
-            category=PropertyCategory.FLAT_NEW,
+            property_type=property_type,
+            category=category,
             developer_id=random.choice(developer_ids),
             project_id=random.choice(project_ids),
             building_id=random.choice(building_ids),
             status=random.choice(list(PropertyStatus)),
-            has_3d_tour=random.choice([True, False])
+            has_3d_tour=random.choice([True, False]),
+            qury=f"{category.value} {rooms}к квартира {area}м2"
         )
         properties.append(property)
     
@@ -339,41 +353,41 @@ async def create_mock_media(session: AsyncSession) -> None:
     await session.commit()
 
 async def create_mock_promotions(session: AsyncSession) -> None:
-    """Создание тестовых акций"""
+    """Создание тестовых промоакций с валидацией"""
     promotions = []
     
-    promo_names = [
-        "Скидка 10% при полной оплате",
-        "Рассрочка 0% на 12 месяцев",
-        "Кладовка в подарок",
-        "Паркинг со скидкой 50%",
-        "Первый взнос от 10%",
-        "Ипотека от 4.5%",
-        "Материнский капитал",
-        "Военная ипотека",
-        "Trade-in",
-        "Бронирование за 20 000 ₽"
-    ]
-    
-    for promo_name in promo_names:
+    for i in range(10):
+        # Генерируем даты с учетом валидации
+        starts_at = datetime.utcnow() + timedelta(days=random.randint(1, 30))
+        ends_at = starts_at + timedelta(days=random.randint(30, 90))
+        
+        # Генерируем скидку с учетом валидации
+        discount_percent = round(random.uniform(5, 15), 2)  # Ограничиваем скидку разумным диапазоном
+        
+        # Генерируем количество использований с учетом валидации
+        max_uses = random.randint(50, 200)
+        current_uses = random.randint(0, max_uses - 1)  # Гарантируем, что current_uses < max_uses
+        
         promotion = Promotion(
-            name=promo_name,
-            description=f"Выгодное предложение для покупателей: {promo_name}",
-            discount_percent=random.randint(5, 20),
-            starts_at=datetime.now() - timedelta(days=random.randint(1, 30)),
-            ends_at=datetime.now() + timedelta(days=random.randint(30, 90)),
+            name=f"Акция {i+1}",
+            description=f"Специальное предложение на квартиры. Скидка {discount_percent}%",
+            discount_percent=discount_percent,
+            starts_at=starts_at,
+            ends_at=ends_at,
             conditions=json.dumps({
                 "min_price": 1000000,
                 "max_price": 10000000,
-                "property_types": ["flat_new"]
+                "property_types": ["flat_new", "townhouse"],
+                "min_area": 40,
+                "max_area": 150
             }),
             is_active=True,
-            max_uses=random.randint(10, 100),
-            current_uses=random.randint(0, 10)
+            max_uses=max_uses,
+            current_uses=current_uses
         )
         promotions.append(promotion)
     
-    # Сохраняем акции
+    # Сохраняем промоакции
     for promotion in promotions:
         session.add(promotion)
     
