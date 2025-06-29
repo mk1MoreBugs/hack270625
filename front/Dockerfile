@@ -2,9 +2,7 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN npm cache clean --force && \
-    rm -rf node_modules && \
-    npm install --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 COPY . .
 
