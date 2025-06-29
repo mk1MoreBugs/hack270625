@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Eye, MapPin, Star, Home } from "lucide-react"
+import { MapPin, Star, Home } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import type { Apartment } from "@/lib/types"
@@ -11,6 +11,12 @@ interface ApartmentCardProps {
 }
 
 export function ApartmentCard({ apartment }: ApartmentCardProps) {
+  const getRoomsText = (rooms: number | undefined) => {
+    if (rooms === undefined || rooms === null) return "Студия"
+    if (rooms === 0) return "Студия"
+    return `${rooms}-комн`
+  }
+
   return (
     <Card className="overflow-hidden hover:shadow-xl transition-shadow">
       <div className="relative">
@@ -23,7 +29,7 @@ export function ApartmentCard({ apartment }: ApartmentCardProps) {
         />
         <Badge className="absolute top-4 left-4 bg-red-500 hover:bg-red-600">{apartment.promotion}</Badge>
         <Badge variant="secondary" className="absolute top-4 right-4">
-          {apartment.rooms === 0 ? "Студия" : `${apartment.rooms}-комн`}
+          {getRoomsText(apartment.rooms)}
         </Badge>
       </div>
 
@@ -57,7 +63,7 @@ export function ApartmentCard({ apartment }: ApartmentCardProps) {
             <span className="text-sm text-gray-600">Комнат:</span>
             <span className="font-medium flex items-center">
               <Home className="w-4 h-4 mr-1" />
-              {apartment.rooms === 0 ? "Студия" : apartment.rooms}
+              {getRoomsText(apartment.rooms)}
             </span>
           </div>
           <div className="pt-3 border-t">
@@ -67,11 +73,6 @@ export function ApartmentCard({ apartment }: ApartmentCardProps) {
             <div className="flex space-x-2">
               <Link href={`/project/${apartment.id}`} className="flex-1">
                 <Button className="w-full">Подробнее</Button>
-              </Link>
-              <Link href={apartment.tourUrl} target="_blank" rel="noopener noreferrer">
-                <Button variant="outline" size="icon" className="bg-transparent">
-                  <Eye className="w-4 h-4" />
-                </Button>
               </Link>
             </div>
           </div>

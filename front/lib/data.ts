@@ -31,6 +31,30 @@ export const filterOptions: FilterOptions = {
   promotions: ["Скидка 10%", "Паркинг в подарок", "Ипотека 0.1%"],
 }
 
+// Массив изображений ЖК для использования в проектах и ИИ-генерации
+export const buildingImages = [
+  "/images/building-1.jpeg",
+  "/images/building-2.jpeg",
+  "/images/building-3.jpeg",
+  "/images/building-4.jpeg",
+  "/images/building-5.jpeg",
+  "/images/building-6.jpeg",
+  "/images/building-7.jpeg",
+  "/images/building-8.jpeg",
+  "/images/building-9.jpeg",
+]
+
+// Функция для получения случайного изображения ЖК
+export const getRandomBuildingImage = () => {
+  return buildingImages[Math.floor(Math.random() * buildingImages.length)]
+}
+
+// Функция для получения 3 случайных изображений ЖК
+export const getRandomBuildingImages = (count = 3) => {
+  const shuffled = [...buildingImages].sort(() => 0.5 - Math.random())
+  return shuffled.slice(0, count)
+}
+
 export const projectsData: Project[] = [
   {
     id: "1",
@@ -40,11 +64,8 @@ export const projectsData: Project[] = [
     price: "от 4.8М ₽",
     class: "Комфорт",
     completion: "2025",
-    images: [
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-      "/placeholder.svg?height=400&width=600",
-    ],
+    image: buildingImages[0],
+    images: [buildingImages[0], buildingImages[1], buildingImages[2]],
     rating: 4.9,
     reviews: 124,
     features: ["Паркинг", "Детская площадка", "Рядом с парком"],
@@ -65,7 +86,8 @@ export const projectsData: Project[] = [
     price: "от 6.2М ₽",
     class: "Бизнес",
     completion: "Сдан",
-    images: ["/placeholder.svg?height=400&width=600"],
+    image: buildingImages[3],
+    images: [buildingImages[3], buildingImages[4]],
     rating: 4.7,
     reviews: 88,
     features: ["Паркинг", "Закрытая территория"],
@@ -86,7 +108,8 @@ export const projectsData: Project[] = [
     price: "от 12.5М ₽",
     class: "Элит",
     completion: "2024",
-    images: ["/placeholder.svg?height=400&width=600"],
+    image: buildingImages[5],
+    images: [buildingImages[5], buildingImages[6]],
     rating: 4.9,
     reviews: 210,
     features: ["Паркинг", "Закрытая территория", "Рядом с парком"],
@@ -106,7 +129,8 @@ export const projectsData: Project[] = [
     price: "от 5.1М ₽",
     class: "Комфорт",
     completion: "2024",
-    images: ["/placeholder.svg?height=400&width=600"],
+    image: buildingImages[7],
+    images: [buildingImages[7], buildingImages[8]],
     rating: 4.6,
     reviews: 150,
     features: ["Паркинг", "Детская площадка"],
@@ -123,34 +147,40 @@ export const projectsData: Project[] = [
 
 export const recommendedApartmentsData: Apartment[] = [
   {
-    id: "a1",
+    id: "1-a2", // Изменено с "a1" на "1-a2"
     name: "2-комнатная",
     project: "ЖК Солнечный Берег",
     area: 65,
     price: "5.2 млн ₽",
-    image: "/placeholder.svg?height=300&width=400",
+    image: buildingImages[0],
     promotion: "Ипотека 0.1%",
     tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+    rooms: 2,
+    floor: 8,
   },
   {
-    id: "a2",
+    id: "1-a1", // Изменено с "a2" на "1-a1"
     name: "Студия",
     project: "ЖК Зеленый Квартал",
     area: 28,
     price: "6.2 млн ₽",
-    image: "/placeholder.svg?height=300&width=400",
+    image: buildingImages[3],
     promotion: "Скидка 10%",
     tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+    rooms: 0,
+    floor: 5,
   },
   {
-    id: "a3",
+    id: "1-a3", // Изменено с "a3" на "1-a3"
     name: "1-комнатная",
     project: "ЖК Центральный",
     area: 42,
     price: "5.5 млн ₽",
-    image: "/placeholder.svg?height=300&width=400",
+    image: buildingImages[7],
     promotion: "Паркинг в подарок",
     tourUrl: "https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default",
+    rooms: 1,
+    floor: 12,
   },
 ]
 

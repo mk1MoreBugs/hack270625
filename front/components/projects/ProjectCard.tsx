@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { MapPin, Star, Calendar, Phone } from "lucide-react"
+import { MapPin, Star, Calendar, Eye } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import type { Project } from "@/lib/types"
@@ -70,9 +70,16 @@ export function ProjectCard({ project }: ProjectCardProps) {
               <Link href={`/real_estates/${project.id}`} className="flex-1">
                 <Button className="w-full">Подробнее</Button>
               </Link>
-              <Button variant="outline" size="icon" className="flex sm:hidden bg-transparent">
-                <Phone className="w-4 h-4" />
-              </Button>
+              <Link
+                href="https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Button variant="outline" className="flex items-center bg-transparent">
+                  <Eye className="w-4 h-4 mr-1" />
+                  3D-Тур ЖК
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

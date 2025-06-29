@@ -10,7 +10,7 @@ import { Slider } from "@/components/ui/slider"
 
 export function HeroSection() {
   const router = useRouter()
-  const [priceRange, setPriceRange] = useState([2000000, 15000000])
+  const [maxPrice, setMaxPrice] = useState([15000000]) // Изменено на одиночное значение
   const [selectedRegion, setSelectedRegion] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedClass, setSelectedClass] = useState("")
@@ -30,8 +30,8 @@ export function HeroSection() {
     if (selectedCompletion) {
       params.set("completion", selectedCompletion)
     }
-    params.set("minPrice", priceRange[0].toString())
-    params.set("maxPrice", priceRange[1].toString())
+    params.set("minPrice", "0") // Минимальная цена всегда 0
+    params.set("maxPrice", maxPrice[0].toString())
 
     router.push(`/catalog?${params.toString()}`)
   }
@@ -78,16 +78,20 @@ export function HeroSection() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Цена: {priceRange[0].toLocaleString()} - {priceRange[1].toLocaleString()} ₽
+                  Максимальная цена: до {maxPrice[0].toLocaleString()} ₽
                 </label>
                 <Slider
-                  value={priceRange}
-                  onValueChange={setPriceRange}
+                  value={maxPrice}
+                  onValueChange={setMaxPrice}
                   max={30000000}
                   min={1000000}
                   step={100000}
                   className="w-full"
                 />
+                <div className="flex justify-between text-xs text-gray-500 mt-1">
+                  <span>1 млн ₽</span>
+                  <span>30 млн ₽</span>
+                </div>
               </div>
               <Select value={selectedClass} onValueChange={setSelectedClass}>
                 <SelectTrigger>

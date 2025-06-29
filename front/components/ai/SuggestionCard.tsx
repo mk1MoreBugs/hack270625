@@ -1,7 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Tag, Home, Layers, Calendar } from "lucide-react"
+import { Tag, Home, Layers, Calendar, Eye } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
 
 // Определяем тип для одного предложения, чтобы использовать его в других компонентах
 export interface Suggestion {
@@ -14,6 +15,7 @@ export interface Suggestion {
   floor: number
   total_floors: number
   year_built: number
+  image?: string // Добавляем поле для изображения
 }
 
 interface SuggestionCardProps {
@@ -33,7 +35,14 @@ export function SuggestionCard({ suggestion }: SuggestionCardProps) {
   const apartmentId = suggestion.id ? `1-a${suggestion.id}` : "1-a1"
 
   return (
-    <Card className="flex flex-col">
+    <Card className="flex flex-col overflow-hidden">
+      {/* Изображение ЖК */}
+      {suggestion.image && (
+        <div className="relative h-48 w-full">
+          <Image src={suggestion.image || "/placeholder.svg"} alt={suggestion.address} fill className="object-cover" />
+        </div>
+      )}
+
       <CardHeader>
         <CardTitle>{suggestion.address}</CardTitle>
         <CardDescription>{suggestion.description}</CardDescription>
@@ -60,9 +69,19 @@ export function SuggestionCard({ suggestion }: SuggestionCardProps) {
             <span>{suggestion.year_built} г.</span>
           </div>
         </div>
-        <div className="mt-auto">
+        <div className="mt-auto space-y-2">
           <Link href={`/project/${apartmentId}`}>
             <Button className="w-full">Посмотреть детали</Button>
+          </Link>
+          <Link
+            href="https://connector.eagle3dstreaming.com/v5/zvnd/Kubinka/default"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button variant="outline" className="w-full bg-transparent">
+              <Eye className="w-4 h-4 mr-2" />
+              3D-Тур ЖК
+            </Button>
           </Link>
         </div>
       </CardContent>

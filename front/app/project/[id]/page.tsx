@@ -28,6 +28,20 @@ const getApartmentById = (apartmentId: string) => {
 
   if (!project) return null
 
+  // Реальные изображения интерьеров
+  const realGallery = [
+    "/images/apartment-bedroom-1.png",
+    "/images/apartment-bedroom-2.png",
+    "/images/apartment-bedroom-3.png",
+    "/images/apartment-bathroom-1.jpeg",
+    "/images/apartment-bathroom-2.jpeg",
+    "/images/apartment-bathroom-3.jpeg",
+    "/images/apartment-kitchen-1.png",
+    "/images/apartment-kitchen-2.png",
+    "/images/apartment-living-1.png",
+    "/images/apartment-living-2.png",
+  ]
+
   // Генерируем данные квартиры на основе ID в соответствии с новой структурой
   const apartmentData = {
     "1-a1": {
@@ -102,13 +116,8 @@ const getApartmentById = (apartmentId: string) => {
     completion: project.completion,
     class: project.class,
     rating: project.rating || 4.8,
-    image: "/placeholder.svg?height=600&width=800",
-    gallery: [
-      "/placeholder.svg?height=600&width=800",
-      "/placeholder.svg?height=600&width=800",
-      "/placeholder.svg?height=600&width=800",
-      "/placeholder.svg?height=600&width=800",
-    ],
+    image: realGallery[0], // Главное изображение
+    gallery: realGallery, // Используем реальные изображения
     created_at: "2025-06-28T06:32:34.547929",
     updated_at: "2025-06-28T06:32:34.547931",
   }

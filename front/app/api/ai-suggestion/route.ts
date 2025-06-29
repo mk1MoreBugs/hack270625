@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { NextResponse } from "next/server"
+import { getRandomBuildingImages } from "@/lib/data"
 
 const MISTRAL_API_URL = "https://api.mistral.ai/v1/chat/completions"
 const apiKey = process.env.HACKB ?? ""
@@ -117,7 +118,19 @@ export async function POST(req: Request) {
     // Валидируем структуру
     const validated = ApiResponseSchema.parse(parsedContent)
 
-    return NextResponse.json({ success: true, data: validated })
+    // Добавляем случайные изображения ЖК к каждому предложению
+    const randomImages = getRandomBuildingImages(3)
+    const suggestionsWithImages = validated.suggestions.map((suggestion, index) => ({
+      ...suggestion,
+      image: randomImages[index] || randomImages[0], // Fallback на первое изображение
+    }))
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        suggestions: suggestionsWithImages,
+      },
+    })
   } catch (err: any) {
     console.error("Ошибка при обработке запроса к ИИ:", err)
 
