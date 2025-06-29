@@ -2,7 +2,12 @@ FROM node:20-alpine
 
 WORKDIR /app
 
-RUN npm install
+COPY package.json package-lock.json ./
+
+ENV NODE_OPTIONS="--max-old-space-size=512"
+RUN npm install --no-optional --legacy-peer-deps \
+npm cache clean --force && \
+rm -rf /tmp/* /var/tmp/*
 
 COPY . .
 
