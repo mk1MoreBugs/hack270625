@@ -5,13 +5,14 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 
 ENV NODE_OPTIONS="--max-old-space-size=512"
-RUN npm install --no-optional --legacy-peer-deps \
-npm cache clean --force && \
-rm -rf /tmp/* /var/tmp/*
+RUN npm install -g pnpm && \
+    pnpm install --no-optional --legacy-peer-deps && \
+    pnpm cache clean --force && \
+    rm -rf /tmp/* /var/tmp/*
 
 COPY . .
 
-RUN npm run build
+RUN pnpm run build
 
 EXPOSE 3000
 
