@@ -1,5 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from app.config import settings
@@ -97,8 +99,9 @@ async def root():
         "redoc_url": "/redoc"
     }
 
+app.mount("/static", StaticFiles(directory="app/tbexport"), name="static")
 
-@app.get("/tbexport")
+@app.get("/tbexport", response_class=HTMLResponse)
 async def tbexport():
     return """
     <html>
@@ -107,8 +110,7 @@ async def tbexport():
         </head>
         <body>
             <div>
-                <iframe src="tbexport/tbexport.html" allowfullscreen="true"></iframe>
-                <iframe src="tbexport/tbexport.mview" allowfullscreen="true"></iframe>
+                <iframe src="/static/tbexport.html" name="viewerframe" allowfullscreen="true" width="1920" height="1080"></iframe>
             </div>
         </body>
     </html>
