@@ -24,10 +24,11 @@ async def get_buildings(
     project_id: int = None,
     session: AsyncSession = Depends(get_async_session)
 ) -> List[BuildingRead]:
-    query = session.query(Building)
+    query = select(Building)
     if project_id:
-        query = query.filter(Building.project_id == project_id)
-    buildings = await query.all()
+        query = query.where(Building.project_id == project_id)
+    result = await session.execute(query)
+    buildings = result.scalars().all()
     return [BuildingRead.from_orm(b) for b in buildings]
 
 

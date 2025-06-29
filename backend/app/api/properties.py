@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
 from app.database import get_async_session
 from app.models import Property, UserRole
 from app.schemas import PropertyCreate, PropertyUpdate, PropertyRead
@@ -22,26 +23,27 @@ async def get_properties(
     rooms: Optional[int] = None,
     session: AsyncSession = Depends(get_async_session)
 ) -> List[PropertyRead]:
-    query = session.query(Property)
+    query = select(Property)
     
     if project_id:
-        query = query.filter(Property.project_id == project_id)
+        query = query.where(Property.project_id == project_id)
     if building_id:
-        query = query.filter(Property.building_id == building_id)
+        query = query.where(Property.building_id == building_id)
     if property_type:
-        query = query.filter(Property.property_type == property_type)
+        query = query.where(Property.property_type == property_type)
     if min_price:
-        query = query.join(Property.price).filter(Property.price.current_price >= min_price)
+        query = query.join(Property.price).where(Property.price.current_price >= min_price)
     if max_price:
-        query = query.join(Property.price).filter(Property.price.current_price <= max_price)
+        query = query.join(Property.price).where(Property.price.current_price <= max_price)
     if min_area:
-        query = query.join(Property.residential).filter(Property.residential.total_area >= min_area)
+        query = query.join(Property.residential).where(Property.residential.total_area >= min_area)
     if max_area:
-        query = query.join(Property.residential).filter(Property.residential.total_area <= max_area)
+        query = query.join(Property.residential).where(Property.residential.total_area <= max_area)
     if rooms:
-        query = query.join(Property.residential).filter(Property.residential.rooms == rooms)
+        query = query.join(Property.residential).where(Property.residential.rooms == rooms)
     
-    properties = await query.all()
+    properties = await session.execute(query)
+    properties = properties.scalars().all()
     return [PropertyRead.from_orm(p) for p in properties]
 
 @router.get("/{property_id}", response_model=PropertyRead,

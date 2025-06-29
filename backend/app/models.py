@@ -111,6 +111,7 @@ class Developer(SQLModel, table=True):
     website: Optional[str] = None
     rating: Optional[float] = Field(default=None, ge=0, le=5)
     projects_count: Optional[int] = Field(default=0)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
     
     # Relationships
     projects: List["Project"] = Relationship(back_populates="developer")
@@ -129,6 +130,7 @@ class Project(SQLModel, table=True):
     status: str = Field(default="active")  # active, completed, frozen
     total_area: Optional[float] = None
     total_units: Optional[int] = None
+    query: Optional[str] = Field(default=None, index=True)
     
     # Relationships
     developer: Optional[Developer] = Relationship(back_populates="projects")
@@ -147,6 +149,7 @@ class Building(SQLModel, table=True):
     status: str = Field(default="under_construction")  # under_construction, completed
     total_units: Optional[int] = None
     available_units: Optional[int] = None
+    qury: Optional[str] = Field(default=None, index=True)
     
     # Relationships
     project: Optional[Project] = Relationship(back_populates="buildings")
@@ -167,6 +170,7 @@ class Property(SQLModel, table=True):
     building_id: Optional[int] = Field(default=None, foreign_key="buildings.id")
     status: PropertyStatus = Field(default=PropertyStatus.AVAILABLE)
     has_3d_tour: bool = Field(default=False)
+    qury: Optional[str] = Field(default=None, index=True)
     
     # Relationships
     developer: Optional[Developer] = Relationship(back_populates="properties")
