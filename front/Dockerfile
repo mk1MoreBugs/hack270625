@@ -6,7 +6,7 @@ COPY package.json package-lock.json ./
 
 ENV NODE_OPTIONS="--max-old-space-size=512"
 RUN npm install -g pnpm && \
-    pnpm install --no-optional --legacy-peer-deps && \
+    pnpm install --no-optional && \
     pnpm cache clean --force && \
     rm -rf /tmp/* /var/tmp/*
 
